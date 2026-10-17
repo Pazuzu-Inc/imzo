@@ -59,7 +59,7 @@ node --test "web/test/*.test.mjs"                     # initiator page logic
 ## Status and honest limits
 
 - Built and unit-tested: the Python reference; the Kotlin protocol port, cross-checked against it; the backend HTTP service; the initiator page logic; the Android app, by JVM tests only.
-- NOT yet run on a phone: the instrumented tests, the biometric prompt, camera scanning and the Compose layout. The checks to do are listed in [`docs/demo-runbook.md`](docs/demo-runbook.md).
+- Run end to end once on a real phone (Redmi 9, Android 12): instrumented tests 6/6, enrol, approve, reject. Scan timings, other phones and the remaining checks are not done; they are listed in [`docs/demo-runbook.md`](docs/demo-runbook.md).
 - Enrolment on the demo backend is open: no key attestation, no admin approval.
 - The protocol is a draft. It has had no independent security review.
 - `payroll-approval.bpmn` was checked for structure (parses, every element has a lane and a diagram shape, no flow crosses a task). It has not been opened in a BPMN editor.

@@ -73,4 +73,6 @@ Kotlin and Compose for the app; Python backend on the laptop; static web page fo
 
 ## Tuning (pending device test)
 
+First run on a real phone: enrolment, accept and reject worked end to end. Scan timings not yet measured.
+
 To fill in after the first device run of the Scan order screen: chunk size (default 200 bytes, about 290 characters per frame, QR version 13 at ECC M), request player fps, scan time for the 12-person payroll, and what worked on the laptop screen (brightness, distance, ECC level).

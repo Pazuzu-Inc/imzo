@@ -90,10 +90,10 @@ The release APK is built unsigned (there is deliberately no signing config in Gr
 ```bash
 cd android
 ./gradlew :app:assembleRelease --offline
-IMZO_KS_PASS='choose-a-demo-password' scripts/sign_release_for_demo.sh     # or run it without the variable to be asked
+scripts/sign_release_for_demo.sh     # asks for the keystore password without echo
 ```
 
-The script creates `~/dev/imzo-demo.keystore` on first use (outside the repo; password from `IMZO_KS_PASS` or typed without echo, never printed), runs `zipalign` and `apksigner` from the newest build-tools, writes `app/build/outputs/apk/release/app-release-demo.apk` and runs `check_permissions.sh` on it. Install that file with `adb install -r`; if a debug build is on the phone, uninstall it first (different signature), which wipes the app's key and counter. This is a demo key, not a release process.
+The script creates `~/dev/imzo-demo.keystore` on first use (outside the repo; password typed at the prompt without echo, never printed; the script refuses a keystore path inside the repo; `IMZO_KS_PASS` also works for non-interactive use, but prefer the prompt because a variable set on the command line ends up in the shell history), runs `zipalign` and `apksigner` from the newest build-tools, writes `app/build/outputs/apk/release/app-release-demo.apk` and runs `check_permissions.sh` on it. Install that file with `adb install -r`; if a debug build is on the phone, uninstall it first (different signature), which wipes the app's key and counter. This is a demo key, not a release process.
 
 ## Tests
 

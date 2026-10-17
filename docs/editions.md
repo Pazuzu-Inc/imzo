@@ -6,7 +6,7 @@ Imzo is the protocol and the rule that the approver shows what it signs. Clients
 | --- | --- | --- |
 | What it is | Dedicated pocket device: small screen, camera, secure element, no radios | Android app on a phone the client already owns or buys cheaply |
 | Network | No Wi-Fi, Bluetooth, cellular or data port. Power-only USB | No `INTERNET` permission in the manifest, so the app cannot open a socket. Camera is the only permission it asks for at runtime (plus install-time biometric) |
-| Key | In the secure element, never exported | In the Android Keystore (StrongBox where present), never exported. Requires a screen lock; removing the lock destroys the key and the device must be enrolled again |
+| Key | In the secure element, never exported | In the Android Keystore (StrongBox tried first where present, else the TEE), never exported. Requires a screen lock; removing the lock destroys the key and the device must be enrolled again |
 | Channel to the world | Camera in, QR on screen out | Camera in, QR on screen out |
 | Assurance | Highest: nothing else runs on it | Good: depends on the phone and OS being kept clean |
 | Cost and speed | Hardware, supply chain, shipping | Install in minutes; the pilot and the hackathon demo use this edition |
@@ -21,7 +21,8 @@ Properties we can state and check:
 - The manifest declares no `INTERNET` permission. `aapt dump permissions` shows only camera and biometric (plus an app-internal receiver permission). Without it the app cannot open a network socket itself, with no code path to audit.
 - No analytics, crash reporter, ad or update SDKs. The dependency list is short enough to review.
 - Backup and device transfer excluded; screenshots blocked in release builds; the signing key is non-exportable.
-- StrongBox is used where the phone has it, else the TEE. Which one a given phone's key ended up in is checked with `KeyInfo` on the device and is not claimed otherwise.
+- StrongBox is tried first where present, else the TEE. Which one a given phone's key ended up in is checked with `KeyInfo` on the device and is not claimed otherwise.
+- Measured on one phone (Redmi 9, Android 12): the key was TEE-backed (securityLevel 1), authentication required for every use (0 s validity), biometric-strong or screen-lock credential; biometric enrolment does not invalidate the key when the screen-lock credential is allowed.
 - A screen lock is required; removing the lock destroys the key and the device must be enrolled again.
 - Install from a signed APK or a managed store, never from the open internet.
 
