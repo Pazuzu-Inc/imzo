@@ -99,6 +99,9 @@ fun registerCheckPermissions(variant: String) {
 registerCheckPermissions("debug")
 registerCheckPermissions("release")
 
+// What gets installed on a phone is the APK the guard just checked: installDebug waits for the check.
+tasks.matching { it.name == "installDebug" }.configureEach { dependsOn("checkPermissionsDebug") }
+
 tasks.register("checkPermissions") {
     group = "verification"
     description = "Builds debug and release and checks both APKs' permissions."
