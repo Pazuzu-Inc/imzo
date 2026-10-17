@@ -9,6 +9,7 @@ activityCompose = "1.9.3"
 fragment = "1.8.5"
 coroutines = "1.9.0"
 junit = "4.13.2"
+orgJson = "20240303"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -26,6 +27,7 @@ zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
