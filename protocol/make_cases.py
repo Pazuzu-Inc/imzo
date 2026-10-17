@@ -7,8 +7,11 @@ lowercase hex. Run: python make_cases.py   (writes cases.json next to this file)
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+
+from cryptography.hazmat.primitives.asymmetric import ec
 
 import imzo_ref as imzo
 from imzo_ref import ProtocolError
@@ -295,8 +298,34 @@ def _frame_cases() -> list[dict]:
 # --------------------------------------------------------------------------- output
 
 
+# --------------------------------------------------------------------------- Kotlin cross-check
+
+P256_ORDER = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+
+
+def _cross_cases() -> dict:
+    """A key and a request addressed to it, for the Kotlin approver to answer (see test_kotlin_cross.py).
+
+    The scalar is derived the same way make_vectors derives its key, from a different label."""
+    secret = int.from_bytes(hashlib.sha256(b"imzo-kotlin-cross-key").digest(), "big") % (P256_ORDER - 1) + 1
+    key = ec.derive_private_key(secret, ec.SECP256R1())
+    request = imzo.build_request(
+        rid=bytes(range(0x40, 0x50)), dev=imzo.device_id(imzo.public_bytes(key)),
+        nonce=bytes(range(0x50, 0x60)), op="payroll", ref="Cross-check payroll",
+        items=[
+            ["Aziza Karimova", "86000000000000000001", 450_000_000],
+            ["Bobur Tursunov", "86000000000000000002", 520_000_000],
+            ["Dilnoza Yusupova", "8600123412341234", 380_050_000],
+        ],
+        ap=(1, 1),
+    )
+    return {"cross_key_secret_hex": secret.to_bytes(32, "big").hex(), "cross_request_hex": request.hex()}
+
+
 def build_cases() -> dict:
-    return {"cbor": _cbor_cases(), "requests": _request_cases(), "frames": _frame_cases()}
+    return {
+        "cbor": _cbor_cases(), "requests": _request_cases(), "frames": _frame_cases(), **_cross_cases(),
+    }
 
 
 def main() -> None:
