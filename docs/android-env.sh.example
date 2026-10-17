@@ -1,0 +1,7 @@
+# Copy to ~/dev/android-env.sh and load it in every new shell:  source ~/dev/android-env.sh
+# Layout assumed: JDK 17 in ~/dev/jdk-17 (macOS bundle: Contents/Home), Gradle 8.9 in ~/dev/gradle-8.9,
+# Android SDK in ~/Library/Android/sdk. See docs/dev-setup.md.
+export JAVA_HOME=$HOME/dev/jdk-17/Contents/Home
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export ANDROID_SDK_ROOT=$ANDROID_HOME
+export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/35.0.0:$HOME/dev/gradle-8.9/bin:$PATH
