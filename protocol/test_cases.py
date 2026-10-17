@@ -49,6 +49,13 @@ REQUIRED = {
         "missing frame",
         "two sessions mixed",
         "index 257 of 257",
+        "base64 plus instead of dash",
+        "base64 slash instead of underscore",
+        "base64 with padding",
+        "base64 with embedded space",
+        "base64 with out-of-alphabet char",
+        "base64 non-canonical trailing bits",
+        "arabic-indic digit counters",
     },
 }
 
@@ -137,6 +144,13 @@ class TestCases(unittest.TestCase):
         self.assertEqual(by_name["frames"]["missing frame"]["error"], "INCOMPLETE")
         self.assertEqual(by_name["frames"]["two sessions mixed"]["error"], "BAD FORMAT")
         self.assertEqual(by_name["frames"]["index 257 of 257"]["error"], "BAD FORMAT")
+        for name in (
+            "base64 plus instead of dash", "base64 slash instead of underscore", "base64 with padding",
+            "base64 with embedded space", "base64 with out-of-alphabet char", "base64 with newline",
+            "base64 non-canonical trailing bits", "arabic-indic digit counters",
+            "arabic-indic digit index only", "superscript digit counters",
+        ):
+            self.assertEqual(by_name["frames"][name]["error"], "BAD FORMAT", name)
         self.assertEqual(len(by_name["frames"]["valid 5-frame request"]["frames"]), 5)
         self.assertEqual(by_name["frames"]["valid 5-frame request"]["kind"], "rq")
         self.assertTrue(by_name["cbor"]["16385-byte string"]["hex"].startswith("594001"))

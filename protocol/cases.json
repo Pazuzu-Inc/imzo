@@ -843,6 +843,76 @@
    "error": "BAD FORMAT"
   },
   {
+   "name": "base64 plus instead of dash",
+   "frames": [
+    "IMQ1.rq.00000010.1.1.AAACEU+4Pg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 slash instead of underscore",
+   "frames": [
+    "IMQ1.rq.00000011.1.1.AAAA/0HZEg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 with padding",
+   "frames": [
+    "IMQ1.rq.00000012.1.1.YWJjNSRBwg=="
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 with embedded space",
+   "frames": [
+    "IMQ1.rq.00000012.1.1.YWJj NSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 with out-of-alphabet char",
+   "frames": [
+    "IMQ1.rq.00000012.1.1.YWJj*NSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 with newline",
+   "frames": [
+    "IMQ1.rq.00000012.1.1.YWJj\nNSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "base64 non-canonical trailing bits",
+   "frames": [
+    "IMQ1.rq.00000012.1.1.YWJjNSRBwh"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "arabic-indic digit counters",
+   "frames": [
+    "IMQ1.rq.00000013.\u0661.\u0661.YWJjNSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "arabic-indic digit index only",
+   "frames": [
+    "IMQ1.rq.00000013.\u0661.1.YWJjNSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
+   "name": "superscript digit counters",
+   "frames": [
+    "IMQ1.rq.00000013.\u00b2.\u00b2.YWJjNSRBwg"
+   ],
+   "error": "BAD FORMAT"
+  },
+  {
    "name": "crc of empty body",
    "frames": [
     "IMQ1.rq.0000000f.1.1.AAAAAA"

@@ -557,8 +557,20 @@ def _b64u(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+_B64U_ALPHABET = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+
+
 def _unb64u(text: str) -> bytes:
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    """Strict unpadded base64url: only [A-Za-z0-9_-], canonical trailing bits (so one encoding per value)."""
+    if not all(c in _B64U_ALPHABET for c in text):
+        raise ProtocolError("BAD FORMAT", "bad base64")
+    try:
+        raw = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    except Exception as exc:  # noqa: BLE001 - e.g. impossible length
+        raise ProtocolError("BAD FORMAT", "bad base64") from exc
+    if _b64u(raw) != text:
+        raise ProtocolError("BAD FORMAT", "bad base64")
+    return raw
 
 
 KINDS = ("rq", "rs", "en", "er")
@@ -584,7 +596,7 @@ def frames_decode(frames: Iterable[str]) -> tuple[str, bytes]:
         if len(pieces) != 6 or pieces[0] != "IMQ1" or pieces[1] not in KINDS:
             raise ProtocolError("BAD FORMAT", "not an IMQ1 frame")
         _, k, s, i_text, n_text, data = pieces
-        if not (i_text.isdigit() and n_text.isdigit()):
+        if not all(t.isascii() and t.isdigit() for t in (i_text, n_text)):
             raise ProtocolError("BAD FORMAT", "bad frame counters")
         i, n = int(i_text), int(n_text)
         if not 1 <= i <= n <= 256:
@@ -593,10 +605,7 @@ def frames_decode(frames: Iterable[str]) -> tuple[str, bytes]:
             kind, sid, total = k, s, n
         elif (k, s, n) != (kind, sid, total):
             raise ProtocolError("BAD FORMAT", "frames from different messages")
-        try:
-            parts[i] = _unb64u(data)
-        except Exception as exc:  # noqa: BLE001 - any decode problem is a bad frame
-            raise ProtocolError("BAD FORMAT", "bad base64") from exc
+        parts[i] = _unb64u(data)
     if kind is None or len(parts) != total:
         raise ProtocolError("INCOMPLETE")
     payload = b"".join(parts[i] for i in range(1, total + 1))

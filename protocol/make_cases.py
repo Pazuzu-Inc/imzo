@@ -238,6 +238,13 @@ def _frame_cases() -> list[dict]:
     one = imzo.frames_encode("rq", bytes.fromhex(_one()), 200, sid="0000000a")
     response = imzo.frames_encode("rs", b"\x01\x02\x03", 200, sid="0000000b")
     chunk_small = imzo.frames_encode("rq", request, 50, sid="0000000c")
+    # 3-byte bodies give 7-byte payloads: 10 base64 chars with 4 trailing bits (canonical: all zero)
+    dash = imzo.frames_encode("rq", b"\x00\x00\x02", 200, sid="00000010")[0]
+    under = imzo.frames_encode("rq", b"\x00\x00\x00", 200, sid="00000011")[0]
+    plain = imzo.frames_encode("rq", b"abc", 200, sid="00000012")[0]
+    assert dash.endswith("AAACEU-4Pg") and under.endswith("AAAA_0HZEg") and plain.endswith("g")
+    head = plain.rsplit(".", 1)[0]
+    data = plain.rsplit(".", 1)[1]
     tail = five[0].rsplit(".", 1)[0].replace(".1.5", ".257.257")
 
     inputs: list[tuple[str, list[str]]] = [
@@ -269,6 +276,17 @@ def _frame_cases() -> list[dict]:
         ("payload shorter than crc", ["IMQ1.rq.00000001.1.1.AAA"]),
         ("bad base64 length", ["IMQ1.rq.00000001.1.1.A"]),
         ("empty data", ["IMQ1.rq.00000001.1.1."]),
+        # strictness: each of these decodes fine in a lenient base64 decoder, so they pin the strict rules
+        ("base64 plus instead of dash", [dash.replace("-", "+")]),
+        ("base64 slash instead of underscore", [under.replace("_", "/")]),
+        ("base64 with padding", [plain + "="] if len(data) % 4 == 3 else [plain + "=="]),
+        ("base64 with embedded space", [f"{head}.{data[:4]} {data[4:]}"]),
+        ("base64 with out-of-alphabet char", [f"{head}.{data[:4]}*{data[4:]}"]),
+        ("base64 with newline", [f"{head}.{data[:4]}\n{data[4:]}"]),
+        ("base64 non-canonical trailing bits", [f"{head}.{data[:-1]}{chr(ord(data[-1]) + 1)}"]),
+        ("arabic-indic digit counters", ["IMQ1.rq.00000013.\u0661.\u0661." + data]),
+        ("arabic-indic digit index only", [f"IMQ1.rq.00000013.\u0661.1.{data}"]),
+        ("superscript digit counters", ["IMQ1.rq.00000013.\u00b2.\u00b2." + data]),
         ("crc of empty body", imzo.frames_encode("rq", b"", 200, sid="0000000f")),
     ]
     return [_frame_case(n, f) for n, f in inputs]
