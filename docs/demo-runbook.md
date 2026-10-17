@@ -28,7 +28,7 @@ The stage story is slide `deck/project/slides/demo.html` (1:00 to 3:15): the pre
 - [ ] Display brightness at maximum, screen lock and sleep disabled, notifications off, battery saver off.
 - [ ] Browser zoom so the request QR is large (the page sizes the QR to the column; start at 100 percent and increase if the phone struggles); QR canvas not covered by anything; no glare on the screen.
 - [ ] fps field at 3 and error correction at M to start (see tuning below); adjust after the first real scan test.
-- [ ] Tamper box **UNTICKED** for Run 1; confirm by checking the executed order's row 7 account equals the original (`GET /api/executed`, e.g. `curl -s http://127.0.0.1:8080/api/executed`) before moving on. (A ticked box once slipped through a page reload; the page now starts unticked, but check.)
+- [ ] Tamper box unticked (its label is not bold or coloured). Run 1 step 8 then proves it from the executed order.
 - [ ] Printed payroll list ready for the judge in Run 2 (the 12 names and accounts from `web/payroll.json`; total 53,515,500.00 UZS). Row 7, Jasur Nazarov, is the one the tamper switch changes: account `86001536904661629361` becomes `...629362` on the phone.
 - [ ] Recorded fallback clip open in a second window or tab, paused at the start (see "Fallback clip").
 - [ ] Optional: `.venv/bin/python -m unittest discover -s backend` and `node --test "web/test/*.test.mjs"` pass on this machine.
@@ -56,6 +56,7 @@ Run 1 and Run 2 use maker `mike`, approver `alice`, reference "Payroll October" 
 5. Judge presses **Approve** and authenticates with the fingerprint (or the screen-lock PIN).
 6. Phone shows APPROVED and the answer QR. Show it to the laptop webcam.
 7. Page status turns **EXECUTED**. Press **Fetch audit log**: `order_created`, `approval_recorded`, `order_executed`, chain ok.
+8. Before moving on to Run 2, check what the server executed: `curl -s http://127.0.0.1:8080/api/executed | jq '.[-1].items[6]'` must print `["Jasur Nazarov","86001536904661629361",530250000]`. If the account ends in `629362`, the tamper box was on during Run 1: press **Reset server**, untick the box, enrol again (and the spare `alice2`, if used) and repeat Run 1.
 
 ## Run 2: the laptop is infected (operator steps)
 
@@ -74,15 +75,15 @@ Between runs without a reset: nothing to do; each press of Send creates a new or
 Only the first real-phone run has happened (Redmi 9, Android 12: instrumented tests 6/6, enrol, approve, reject). The rest of these checks has not been done. Copied from the reviewers' lists:
 
 - Prepare phone: secure lock + fingerprint; run `./gradlew :app:connectedDebugAndroidTest` BEFORE any demo enrolment (it uninstalls the app and wipes key/counter; or pass `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`).
-- KeyInfo checks: auth required, 0 s validity, security level (StrongBox vs TEE).
+- KeyInfo checks: auth required, 0 s validity and security level were read on the Redmi 9 (see `docs/editions.md`). Still to observe: whether enrolling an extra fingerprint invalidates the key (KeyInfo reported `isInvalidatedByBiometricEnrollment=false`, but the behaviour has not been seen).
 - Prompt behaviour: per-use prompt every time, PIN path, cancel, wrong finger, lockout notice.
 - Scan the laptop page's request frames: time for the 12-person payroll, 50-item payroll; tune chunk size/fps; answer QR readable by the laptop webcam; max brightness.
 - Review screen: 50 items scroll fully, header + buttons visible in portrait, landscape and at max font size; wrong-device order shows WRONG DEVICE without buttons; rotation during the prompt.
 - Enrolment: code matches laptop; cancel during enrolment; no-screen-lock message; key-lost message.
 - Release build (signed with `android/scripts/sign_release_for_demo.sh`): FLAG_SECURE blocks screenshots; no probe button.
-- Enrol an extra fingerprint then sign (observe key invalidation); remove and reset screen lock then sign (expect "device key missing; enrol this device again").
+- Enrol an extra fingerprint then sign (observe whether the key is invalidated; not yet observed either way); remove and reset screen lock then sign (expect "device key missing; enrol this device again").
 
-Results to record here once known: scan time 12-person payroll ___ s; 50-item payroll ___ s; chunk size ___ bytes; fps ___; ECC ___; security level ___ (StrongBox or TEE).
+Results to record here once known: scan time 12-person payroll ___ s; 50-item payroll ___ s; chunk size ___ bytes; fps ___; ECC ___; security level: measured on the Redmi 9: TEE (securityLevel 1), not StrongBox.
 
 ## Recovery
 
@@ -94,7 +95,8 @@ Results to record here once known: scan time 12-person payroll ___ s; 50-item pa
 | **ALREADY ENROLLED or USER ALREADY HAS A DEVICE** on enrolment | This phone's key, or this user, is already registered on the server. Press **Reset server** first, then enrol again (and enrol the spare `alice2` again, if used). A locked device also keeps the slot until the reset. |
 | **EXPIRED** | Orders expire after 300 s. Press **Send to approver** again. |
 | **Biometric lockout** (too many wrong fingers) | The app shows a lockout notice. Wait for the lockout to end, or use the screen-lock PIN in the prompt. Fall back to the spare phone or the clip. |
-| **Key lost** (phone shows DEVICE KEY LOST, or "device key missing; enrol this device again") | The key was removed or invalidated (screen lock removed, extra fingerprint enrolled). Going back cannot help. Press **Open app settings** on that screen (or Android Settings, Apps, Imzo), Storage, **Clear data**. Reopen the app, press **Reset server** on the page (or `curl -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/reset`), then run the enrolment script again (including the spare `alice2`, if used). |
+| **Key lost** (phone shows DEVICE KEY LOST, or "device key missing; enrol this device again") | The key was removed or invalidated (screen lock removed; possibly also an extra fingerprint enrolled, which has not been observed yet). Going back cannot help. Press **Open app settings** on that screen (or Android Settings, Apps, Imzo), Storage, **Clear data**. Reopen the app, press **Reset server** on the page (or `curl -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/reset`), then run the enrolment script again (including the spare `alice2`, if used). |
+| **Device LOCKED** after 5 bad answers (Send fails with NO DEVICE, an answer is refused with DEVICE NOT ACTIVE, and enrolling the same user is refused with USER ALREADY HAS A DEVICE) | A locked device keeps the user's slot on purpose, so nobody else can enrol in its place. Press **Reset server**, then run the enrolment script again (including the spare `alice2`, if used). |
 | **Backend restarted or crashed** | All state is in memory: devices, orders and audit log are gone and the phone is no longer registered. Restart `.venv/bin/python backend/app.py`, reload the page, run the enrolment script again. The phone keeps its own key and counter; no data clearing is needed. |
 | **Page returns 403 FORBIDDEN** | The address in the browser is not `127.0.0.1:8080` or `localhost:8080`. Open <http://127.0.0.1:8080/>. |
 | **Camera blocked on the page** | Chrome camera icon in the address bar, allow and reload. Check no other app holds the webcam. |

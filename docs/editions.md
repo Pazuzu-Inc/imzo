@@ -22,7 +22,7 @@ Properties we can state and check:
 - No analytics, crash reporter, ad or update SDKs. The dependency list is short enough to review.
 - Backup and device transfer excluded; screenshots blocked in release builds; the signing key is non-exportable.
 - StrongBox is tried first where present, else the TEE. Which one a given phone's key ended up in is checked with `KeyInfo` on the device and is not claimed otherwise.
-- Measured on one phone (Redmi 9, Android 12): the key was TEE-backed (securityLevel 1), authentication required for every use (0 s validity), biometric-strong or screen-lock credential; biometric enrolment does not invalidate the key when the screen-lock credential is allowed.
+- Measured on one phone (Redmi 9, Android 12): the key was TEE-backed (securityLevel 1), authentication required for every use (0 s validity), biometric-strong or screen-lock credential. KeyInfo reported isInvalidatedByBiometricEnrollment=false on that phone; an enrol-a-fingerprint-then-sign test has not been run.
 - A screen lock is required; removing the lock destroys the key and the device must be enrolled again.
 - Install from a signed APK or a managed store, never from the open internet.
 
