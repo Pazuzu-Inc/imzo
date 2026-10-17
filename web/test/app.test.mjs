@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 // A tiny stand-in for the browser, just enough to run app.js unmodified.
 
@@ -28,6 +29,8 @@ const click = (id) => handlers[id].click();
 const PAYROLL = Array.from({ length: 12 }, (_, i) => [`Person ${i + 1}`, `8600${String(i + 1).padStart(16, "0")}`, 1000 + i]);
 const calls = [];
 let answerStatus = "PENDING";
+let answerError = null; // when set, POST /api/answers fails with this error code (HTTP 400)
+const FINGERPRINT = "bada fele kogi mumi puta rasi";
 let ordersGate = null; // when set, POST /api/orders waits for this promise
 globalThis.fetch = async (path, init = {}) => {
   const method = init.method || "GET";
@@ -36,9 +39,9 @@ globalThis.fetch = async (path, init = {}) => {
   if (path === "payroll.json") return reply(PAYROLL);
   if (path === "/api/orders" && method === "POST") {
     if (ordersGate) await ordersGate;
-    return reply({ order_id: "ord-1", frames: ["IMQ1.rq.aaaa0001.1.1.QQ"], fingerprint: "x" });
+    return reply({ order_id: "ord-1", frames: ["IMQ1.rq.aaaa0001.1.1.QQ"], fingerprint: FINGERPRINT });
   }
-  if (path === "/api/answers") return reply({ status: answerStatus });
+  if (path === "/api/answers") return answerError ? reply({ error: answerError }, false) : reply({ status: answerStatus });
   if (path === "/api/audit") return reply({ ok: true, rows: [] });
   if (path.startsWith("/api/orders/")) return reply({ status: "PENDING" });
   if (path === "/api/reset") return reply({ ok: true });
@@ -101,6 +104,61 @@ test("after a PENDING answer the collector restarts, so the next frame does not 
   await sleep(450);
   assert.equal(answers(), before + 1, "no second POST of the same frames");
   assert.equal(element("progress").textContent, "answer frames: 1/2", "collection starts over");
+});
+
+test("the page shows the fingerprint of the order it submitted, labelled to match the approver", async () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.ok(html.includes("Order fingerprint (same words on the approver)"), "label in the order panel");
+  assert.match(html, /id="fingerprint"/);
+  await click("send");
+  assert.equal(element("fingerprint").textContent, FINGERPRINT);
+  assert.equal(element("fpWrap").hidden, false);
+  await click("reset");
+  assert.equal(element("fingerprint").textContent, "", "cleared with the server");
+  assert.equal(element("fpWrap").hidden, true);
+});
+
+test("an /api/answers error while an order is shown keeps the request QR going and collecting", async () => {
+  await click("send");
+  const answers = () => calls.filter((c) => c.path === "/api/answers").length;
+  const before = answers();
+  answerError = "NOT PENDING";
+  scanQueue.push("IMQ1.rs.cccc0003.1.2.QQ", "IMQ1.rs.cccc0003.2.2.QQ"); // a stale answer still on the phone
+  await sleep(450);
+  assert.equal(answers(), before + 1);
+  assert.equal(element("status").textContent, "PENDING", "the order is still pending");
+  assert.equal(element("status").className, "pending");
+  assert.match(element("hint").textContent, /NOT PENDING/);
+  assert.match(element("playinfo").textContent, /showing frame/, "request QR keeps playing");
+  assert.equal(element("progress").textContent, "answer frames: 0/0", "collector reset");
+
+  // the stale answer is still in view: it is not POSTed again (that would count against the device)
+  scanQueue.push("IMQ1.rs.cccc0003.1.2.QQ", "IMQ1.rs.cccc0003.2.2.QQ");
+  await sleep(450);
+  assert.equal(answers(), before + 1, "no second POST of an answer the server already refused");
+
+  // a fresh answer is still collected and sent
+  answerError = null;
+  scanQueue.push("IMQ1.rs.dddd0004.1.2.QQ", "IMQ1.rs.dddd0004.2.2.QQ");
+  await sleep(450);
+  assert.equal(answers(), before + 2);
+  assert.equal(element("status").textContent, "PENDING");
+});
+
+test("an /api/enrol/finish error still stops the stage", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (path, init) => {
+    if (path === "/api/enrol/begin") return { ok: true, status: 200, json: async () => ({ frames: ["IMQ1.en.eeee0005.1.1.QQ"] }) };
+    if (path === "/api/enrol/finish") return { ok: false, status: 400, json: async () => ({ error: "USER ALREADY HAS A DEVICE" }) };
+    return realFetch(path, init);
+  };
+  await click("enrolBegin");
+  scanQueue.push("IMQ1.er.ffff0006.1.1.QQ");
+  await sleep(450);
+  globalThis.fetch = realFetch;
+  assert.equal(element("status").textContent, "USER ALREADY HAS A DEVICE");
+  assert.equal(element("status").className, "bad");
+  assert.equal(element("playinfo").textContent, "", "stage stopped");
 });
 
 test("Send is re-enabled and the error shown when applyTamper throws (non-digit account)", async () => {

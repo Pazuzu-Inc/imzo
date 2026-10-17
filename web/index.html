@@ -52,6 +52,8 @@
 
   #code { font-size: 110px; font-weight: 800; letter-spacing: .12em; text-align: center; font-variant-numeric: tabular-nums; margin: 8px 0; }
   #code:empty { display: none; }
+  #fingerprint { font: 700 22px/1.3 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  #fpWrap[hidden] { display: none; }
   #chain { font-weight: 800; font-size: 20px; }
   #chain.ok { color: var(--ok); } #chain.bad { color: var(--bad); }
   #auditRows { max-height: 260px; overflow: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
@@ -124,6 +126,10 @@
       <div class="row">
         <label><input id="tamper" type="checkbox"> Demo: infected laptop</label>
         <button id="send">Send to approver</button>
+      </div>
+      <div id="fpWrap" hidden>
+        <div class="note">Order fingerprint (same words on the approver)</div>
+        <div id="fingerprint"></div>
       </div>
     </section>
 

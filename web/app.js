@@ -15,6 +15,8 @@ const scanner = new FrameScanner($("cam"), onScanned);
 let session = null;
 let finishing = false;
 let poll = null;
+/** Answers (frames joined) already sent in this order session; never POSTed twice, so a stale answer QR in view cannot lock the device. */
+const sent = new Set();
 let payroll = [];
 
 // --------------------------------------------------------------------------- helpers
@@ -83,6 +85,7 @@ function startPlaying(frames) {
 function beginSession(next, expectedKind) {
   stopStage();
   collector.reset();
+  sent.clear();
   finishing = false;
   session = { ...next, expectedKind };
   setProgress(0, 0);
@@ -104,8 +107,14 @@ function onScanned(text) {
 
 async function finishFrames(frames) {
   const current = session;
+  const key = frames.join("\n");
   try {
     if (current.mode === "order") {
+      if (sent.has(key)) {
+        keepCollecting("This answer was already sent. On the phone press Done, then Send again if needed.");
+        return;
+      }
+      sent.add(key);
       const { status } = await api("/api/answers", { frames });
       showOrderStatus(status);
     } else {
@@ -113,11 +122,25 @@ async function finishFrames(frames) {
       showEnrolled(code);
     }
   } catch (err) {
-    stopStage();
-    setStatus(err.message, "bad", "Server refused the answer. Send again to retry.");
+    if (current.mode === "order" && session === current) {
+      // The order is still open and its request QR must stay up: show the refusal as a hint and listen on.
+      if (err instanceof TypeError) sent.delete(key); // never reached the server: the same answer may be tried again
+      keepCollecting(`${err.message}. Show the phone's answer again, or Send again.`);
+    } else {
+      stopStage();
+      setStatus(err.message, "bad", "Server refused the answer. Send again to retry.");
+    }
   } finally {
     finishing = false;
   }
+}
+
+/** Start collecting answer frames afresh without touching the request QR, the poll or the status. */
+function keepCollecting(hint) {
+  collector.reset();
+  scanner.resetDedupe();
+  setProgress(0, 0);
+  $("hint").textContent = hint;
 }
 
 function showOrderStatus(status) {
@@ -164,6 +187,7 @@ async function sendOrder() {
   const tamper = $("tamper").checked;
   const sendButton = $("send");
   sendButton.disabled = true; // no second order while this request is in flight
+  showFingerprint(""); // never leave the previous order's words next to a new or failed order
   try {
     let created;
     try {
@@ -178,8 +202,9 @@ async function sendOrder() {
     } finally {
       sendButton.disabled = false;
     }
-    const { order_id, frames } = created;
+    const { order_id, frames, fingerprint } = created;
     beginSession({ mode: "order", orderId: order_id }, "rs");
+    showFingerprint(fingerprint);
     setStatus("PENDING", "pending", "Phone: scan this QR, check the order, then show the reply to the webcam.");
     startPlaying(frames);
     poll = setInterval(pollOrder, 1500);
@@ -189,6 +214,12 @@ async function sendOrder() {
     session = null;
     setStatus(err.message, "bad");
   }
+}
+
+/** The words the approver shows for the order that was actually submitted (tampered or not). */
+function showFingerprint(words) {
+  $("fingerprint").textContent = words || "";
+  $("fpWrap").hidden = !words;
 }
 
 async function pollOrder() {
@@ -230,6 +261,7 @@ async function resetServer() {
   session = null;
   collector.reset();
   $("code").textContent = "";
+  showFingerprint("");
   setProgress(0, 0);
   try {
     await api("/api/reset", {});
