@@ -12,14 +12,14 @@ private const val QUIET_ZONE = 4
 
 /**
  * The QR code for `text` as a module matrix that already includes the quiet zone (`true` = dark).
- * Frames are ASCII, so ISO-8859-1 keeps the payload in byte mode with no ECI header.
+ * No CHARACTER_SET hint: passing one makes ZXing prepend an ECI segment, which simpler decoders (the
+ * laptop page's jsQR) can trip over; ISO-8859-1 is the default and frames are ASCII anyway.
  * Width and height 0 asks ZXing for the natural size: one matrix cell per module.
  */
 internal fun qrMatrix(text: String, ecc: ErrorCorrectionLevel = ErrorCorrectionLevel.M): BitMatrix {
     val hints = mapOf(
         EncodeHintType.ERROR_CORRECTION to ecc,
         EncodeHintType.MARGIN to QUIET_ZONE,
-        EncodeHintType.CHARACTER_SET to "ISO-8859-1",
     )
     return QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
 }

@@ -30,7 +30,6 @@ import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -68,25 +67,40 @@ internal class QrFrameDecoder {
 
     /** The QR text in the image's visible area, or null when there is none (or it is unreadable). */
     fun decode(image: ImageProxy): String? {
-        val plane = image.planes[0]
-        val rowStride = plane.rowStride
-        val height = image.height
-        val buffer = plane.buffer
-        // Copy exactly rowStride * height bytes; the last row of the buffer may be short.
-        val data = ByteArray(rowStride * height)
-        buffer.rewind()
-        buffer.get(data, 0, minOf(buffer.remaining(), data.size))
-        val crop: Rect = image.cropRect
-        val left = crop.left.coerceIn(0, image.width - 1)
-        val top = crop.top.coerceIn(0, height - 1)
-        val width = crop.width().coerceAtMost(image.width - left)
-        val cropHeight = crop.height().coerceAtMost(height - top)
         return try {
-            val source = PlanarYUVLuminanceSource(data, rowStride, height, left, top, width, cropHeight, false)
-            reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
-        } catch (_: ReaderException) { // NotFound, Checksum, Format: nothing readable in this frame
+            val plane = image.planes[0]
+            val buffer = plane.buffer
+            buffer.rewind()
+            val bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
+            val crop: Rect = image.cropRect
+            decodeLuma(bytes, plane.rowStride, image.width, image.height, crop.left, crop.top, crop.width(), crop.height())
+        } catch (_: Exception) { // odd frame or buffer trouble: drop it, never crash the analysis thread
             null
-        } catch (_: IllegalArgumentException) { // crop outside the data; skip the frame
+        }
+    }
+
+    /**
+     * Decodes the QR text in a luminance plane: `bytes` holds `height` rows of `rowStride` bytes (the
+     * last row may be short or the buffer shorter than `rowStride * height`; it is zero-padded), of
+     * which `width` bytes per row are image. The crop is clamped to the image. Returns null for
+     * anything unreadable or malformed (including odd dimensions); never throws.
+     */
+    fun decodeLuma(
+        bytes: ByteArray, rowStride: Int, width: Int, height: Int,
+        cropLeft: Int, cropTop: Int, cropWidth: Int, cropHeight: Int,
+    ): String? {
+        return try {
+            if (rowStride <= 0 || width <= 0 || height <= 0 || width > rowStride) return null
+            val left = cropLeft.coerceIn(0, width - 1)
+            val top = cropTop.coerceIn(0, height - 1)
+            val w = cropWidth.coerceAtMost(width - left)
+            val h = cropHeight.coerceAtMost(height - top)
+            if (w <= 0 || h <= 0) return null
+            val needed = rowStride * height
+            val data = if (bytes.size == needed) bytes else bytes.copyOf(needed)
+            val source = PlanarYUVLuminanceSource(data, rowStride, height, left, top, w, h, false)
+            reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
+        } catch (_: Exception) { // ReaderException (nothing readable) or an unchecked one from the detector
             null
         } finally {
             reader.reset()
@@ -111,6 +125,7 @@ fun CameraScanner(modifier: Modifier = Modifier, onText: (String) -> Unit) {
         val mainExecutor = ContextCompat.getMainExecutor(context)
         val analysisExecutor = Executors.newSingleThreadExecutor()
         val decoder = QrFrameDecoder()
+        var disposed = false // main thread only
         val debouncer = Debouncer(300) { System.nanoTime() / 1_000_000 }
         val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
         val analysis = ImageAnalysis.Builder()
@@ -127,15 +142,15 @@ fun CameraScanner(modifier: Modifier = Modifier, onText: (String) -> Unit) {
             try {
                 val text = decoder.decode(image)
                 if (text != null && text.startsWith(FRAME_PREFIX) && debouncer.shouldEmit(text)) {
-                    mainExecutor.execute { currentOnText(text) }
+                    mainExecutor.execute { if (!disposed) currentOnText(text) }
                 }
+            } catch (_: Exception) { // an exception escaping here would kill the app: drop the frame
             } finally {
                 image.close()
             }
         }
 
         var provider: ProcessCameraProvider? = null
-        var disposed = false
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
             if (disposed) return@addListener
