@@ -323,6 +323,40 @@ class EnrolmentTests(unittest.TestCase):
         self.assertNotIn(nonce2, server._pending_enrol)  # the nonce is consumed
         self.assertEqual(code_of(server.finish_enrolment, answer), "BAD SIGNATURE")
 
+    def test_a_user_with_an_active_device_cannot_enrol_a_second_one(self):
+        server = imzo.Server()
+        first = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        server.finish_enrolment(imzo.dumps(first.enrolment_answer(nonce, "demo")))
+        second = imzo.Device()
+        nonce2, _ = server.begin_enrolment("alice", "demo")
+        rows, devices = len(server.audit), dict(server.devices)
+        answer = imzo.dumps(second.enrolment_answer(nonce2, "demo"))
+        self.assertEqual(code_of(server.finish_enrolment, answer), "USER ALREADY HAS A DEVICE")
+        self.assertEqual(server.devices, devices)
+        self.assertEqual(len(server.audit), rows)
+        self.assertNotIn(nonce2, server._pending_enrol)  # the nonce is consumed
+        self.assertEqual(code_of(server.finish_enrolment, answer), "BAD SIGNATURE")
+
+    def test_a_revoked_or_locked_device_does_not_block_a_new_enrolment(self):
+        server = imzo.Server()
+        for status in ("REVOKED", "LOCKED"):
+            old = imzo.Device()
+            nonce, _ = server.begin_enrolment("alice", "demo")
+            server.finish_enrolment(imzo.dumps(old.enrolment_answer(nonce, "demo")))
+            server.devices[old.id]["status"] = status
+            new = imzo.Device()
+            nonce, _ = server.begin_enrolment("alice", "demo")
+            self.assertEqual(server.finish_enrolment(imzo.dumps(new.enrolment_answer(nonce, "demo"))), new.id)
+            server.devices[new.id]["status"] = "REVOKED"
+
+    def test_another_user_can_still_enrol(self):
+        server = imzo.Server()
+        for user in ("alice", "alice2"):
+            dev = imzo.Device()
+            nonce, _ = server.begin_enrolment(user, "demo")
+            self.assertEqual(server.finish_enrolment(imzo.dumps(dev.enrolment_answer(nonce, "demo"))), dev.id)
+
     def test_pending_enrolments_are_capped_and_the_oldest_is_evicted(self):
         server = imzo.Server()
         nonces = [server.begin_enrolment("alice")[0] for _ in range(server.MAX_PENDING_ENROLMENTS + 5)]

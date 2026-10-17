@@ -267,6 +267,33 @@ class ReEnrolmentTests(BackendCase):
         self.assertEqual((status, out), (400, {"error": "BAD SIGNATURE"}))  # nonce was consumed
 
 
+class OneDevicePerUserTests(BackendCase):
+    def test_second_enrolment_for_a_user_with_an_active_device_is_refused(self):
+        first, _, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+        rows = len(backend.STATE.server.audit)
+        _, _, status, out = self.enrol("alice")
+        self.assertEqual((status, out), (400, {"error": "USER ALREADY HAS A DEVICE"}))
+        self.assertEqual(len(backend.STATE.server.devices), 1)
+        self.assertEqual(len(backend.STATE.server.audit), rows + 1)  # only enrolment_started
+        # orders still go to the first device
+        status, created = self.order()
+        self.assertEqual(status, 200)
+        (status, out), _ = self.answer(first, created["frames"])
+        self.assertEqual((status, out), (200, {"status": "EXECUTED"}))
+
+    def test_reset_allows_re_enrolment(self):
+        self.enrol("alice")
+        self.call("POST", "/api/reset", {})
+        _, _, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+
+    def test_a_different_user_can_enrol(self):
+        self.enrol("alice")
+        _, _, status, _ = self.enrol("alice2")
+        self.assertEqual(status, 200)
+
+
 class RequestGuardTests(BackendCase):
     def host(self, name="127.0.0.1"):
         return f"{name}:{self.port}"
