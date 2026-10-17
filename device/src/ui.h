@@ -20,6 +20,9 @@ public:
     /** Three dots at the bottom: `count` of the 3 clicks made so far in the current series. */
     void showClicks(int count);
 
+    /** "Are you sure?" page after the decision was chosen. */
+    void showConfirm(const imzo::Review& r, bool approve);
+
     void showEnrolCode(const std::string& code, const std::string& org);
     /** One QR frame of an answer. `title` says what to do with it; `index`/`count` count the frames. */
     void showQr(const std::string& title, const std::string& text, size_t index, size_t count);

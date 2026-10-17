@@ -1,6 +1,6 @@
 # Imzo Device (ESP32-S3, LilyGO T-Display S3 AMOLED)
 
-A second approver for the same protocol as the Android app: it takes `IMQ1` frames, shows every beneficiary on its 536x240 screen, signs after three clicks of the BOOT button and shows the answer as a QR. Only BOOT is usable as a control; the board's other button resets the chip. Design: [`docs/superpowers/specs/2026-10-17-imzo-device-design.md`](../docs/superpowers/specs/2026-10-17-imzo-device-design.md).
+A second approver for the same protocol as the Android app: it takes `IMQ1` frames, shows every beneficiary on its 536x240 screen, signs after three clicks of the BOOT button and a second "are you sure" step and shows the answer as a QR. Only BOOT is usable as a control; the board's other button resets the chip. Design: [`docs/superpowers/specs/2026-10-17-imzo-device-design.md`](../docs/superpowers/specs/2026-10-17-imzo-device-design.md).
 
 | Path | What |
 | --- | --- |

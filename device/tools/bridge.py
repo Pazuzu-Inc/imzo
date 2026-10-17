@@ -146,13 +146,18 @@ def do_order(dev: Device, approver: str, maker: str, tamper: bool, decision: str
     print("device is on the review screen")
     n = len(items)
     if decision == "manual":
-        print("review on the device; on the last page: 3 clicks approve, 2 clicks reject ...")
+        print("review on the device; on the last page: 3 clicks approve, 2 clicks reject, then 2 clicks to confirm ...")
     else:
         for _ in range(n + 1):  # summary -> every beneficiary -> decision page
             dev.send("CLICK")
             time.sleep(0.25)
         dev.send("CLICK3" if decision == "approve" else "CLICK2")
-    frames = collect_answer(dev, 90 if decision == "manual" else 10)
+        if not dev.wait_for("STATE confirm", 5):  # the device asks again: two fresh clicks say yes
+            print("device did not show the confirm page")
+            return 1
+        time.sleep(1.0)  # the device ignores clicks right after the confirm page appears
+        dev.send("CLICK2")
+    frames = collect_answer(dev, 300 if decision == "manual" else 10)
     if not frames:
         print("no answer from the device")
         return 1

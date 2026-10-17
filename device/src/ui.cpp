@@ -179,6 +179,22 @@ void Ui::showClicks(int count) {
     }
 }
 
+void Ui::showConfirm(const imzo::Review& r, bool approve) {
+    clear();
+    header(approve ? "CONFIRM: APPROVE" : "CONFIRM: REJECT", approve ? C_GREEN : C_RED);
+    textCentre(66, approve ? "Are you sure you want to APPROVE" : "Are you sure you want to REJECT", 1, C_WHITE);
+    const std::string total = imzo::formatAmount(r.total) + " UZS";
+    textCentre(104, std::to_string((unsigned long)r.count) + (r.count == 1 ? " payment, total " : " payments, total ") , 1, C_GREY);
+    textCentre(138, total, 2, C_GREEN);
+    textCentre(166, "check " + r.fingerprint, 1, C_CYAN);
+    gfx->fillRect(10, 176, 258, 28, approve ? 0x0320 : 0x8000);
+    text(18, 196, approve ? "2 clicks: YES, APPROVE" : "2 clicks: YES, REJECT", 1, C_WHITE);
+    gfx->fillRect(278, 176, 248, 28, 0x2104);
+    text(286, 196, "1 click: no, go back", 1, C_WHITE);
+    gfx->fillRect(0, H - 26, W, 26, C_BLACK);
+    showClicks(0);
+}
+
 void Ui::showEnrolCode(const std::string& code, const std::string& org) {
     clear();
     header("ENROL THIS DEVICE", C_AMBER, org);

@@ -32,7 +32,7 @@ using imzo::ProtocolError;
 
 namespace {
 
-enum class Mode { Idle, Review, Enrol, Answer, Error };
+enum class Mode { Idle, Review, Confirm, Enrol, Answer, Error };
 
 Ui ui;
 Buttons buttons;
@@ -60,6 +60,12 @@ constexpr uint32_t CLICK_GAP_MS = 1200;  // longest pause between clicks of one 
 constexpr uint32_t RESOLVE_MS = 1000;    // pause after the last click before a 1- or 2-click series counts
 int clickCount = 0;
 uint32_t lastClickAt = 0;
+// Second step: after choosing approve or reject the device asks again. 1 click = no, go back; 2 clicks = yes.
+// Clicks in the first LOCKOUT_MS are ignored so that a fast run of clicks cannot slide through both steps.
+constexpr uint32_t CONFIRM_LOCKOUT_MS = 700;
+constexpr uint32_t CONFIRM_TIMEOUT_MS = 20000;
+bool pendingApprove = false;
+uint32_t confirmShownAt = 0;
 
 struct LineReader {
     std::string buf;
@@ -199,6 +205,15 @@ int countClick() {
     return clickCount;
 }
 
+void toConfirm(bool approve) {
+    pendingApprove = approve;
+    mode = Mode::Confirm;
+    resetClicks();
+    confirmShownAt = millis();
+    ui.showConfirm(review, approve);
+    devlog(std::string("STATE confirm ") + (approve ? "approve" : "reject"));
+}
+
 void startEnrolAnswer() {
     try {
         Bytes ans = imzo::enrolmentAnswer(challenge, key);
@@ -223,8 +238,18 @@ void onClick() {
             }
             int n = countClick();
             if (n >= 3) {
+                toConfirm(true);
+            } else {
+                ui.showClicks(n);
+            }
+            break;
+        }
+        case Mode::Confirm: {
+            if (millis() - confirmShownAt < CONFIRM_LOCKOUT_MS) break;  // too soon: not a deliberate click
+            int n = countClick();
+            if (n >= 2) {
                 resetClicks();
-                decide(true);
+                decide(pendingApprove);
             } else {
                 ui.showClicks(n);
             }
@@ -249,8 +274,11 @@ void resolveSeries() {
     int n = clickCount;
     resetClicks();
     if (mode == Mode::Review) {
-        if (n == 2) decide(false);
+        if (n == 2) toConfirm(false);
         else { page = 0; showReview(); }  // one click: start the list again
+    } else if (mode == Mode::Confirm) {
+        mode = Mode::Review;  // one click: no, back to the decision page
+        showReview();
     } else if (mode == Mode::Enrol) {
         if (n == 2) toIdle();
         else ui.showEnrolCode(imzo::enrolmentCode(key.publicKey()), challenge.org);
@@ -310,11 +338,19 @@ void loop() {
         else handleDevCommand(line);
     }
 #endif
-    if (buttons.clicked()) onClick();
+    if (buttons.clicked()) {
+        devlog("PHYSICAL CLICK");  // lets a rehearsal tell a real finger from a serial test command
+        onClick();
+    }
     resolveSeries();
     if (mode == Mode::Answer && answerFrames.size() > 1 && millis() - answerShownAt > 900) {
         answerIdx = (answerIdx + 1) % answerFrames.size();
         showAnswerFrame();
+    }
+    if (mode == Mode::Confirm && millis() - confirmShownAt > CONFIRM_TIMEOUT_MS) {
+        resetClicks();
+        mode = Mode::Review;  // nobody answered: nothing is signed, back to the decision page
+        showReview();
     }
     if (mode == Mode::Error && millis() - errorAt > 10000) toIdle();
     delay(10);
