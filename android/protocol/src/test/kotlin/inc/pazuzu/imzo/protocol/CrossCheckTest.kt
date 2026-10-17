@@ -41,4 +41,30 @@ class CrossCheckTest {
                 .toString(2) + "\n",
         )
     }
+
+    /**
+     * The Kotlin approver's enrolment answer for a fixed nonce/org, written to `build/cross/enrol.json`;
+     * the Python test makes a pending enrolment with that nonce and runs the reference `finish_enrolment`.
+     */
+    @Test
+    fun answerAnEnrolmentChallengeAndWriteForTheReference() = runBlocking {
+        val secret = BigInteger(1, Cases.root.getString("cross_key_secret_hex").hexToBytes())
+        val signer = SoftSigner.fromScalar(secret)
+        val nonce = ByteArray(16) { (0x60 + it).toByte() }
+        val org = "demo"
+
+        val answer = Approver(signer, MemoryCounter()).enrolmentAnswer(nonce, org)
+        val m = Cbor.loads(answer) as Map<*, *>
+        assertTrue(verifyRaw(signer.publicKey, "IMZO/1/enrol\u0000".toByteArray(Charsets.ISO_8859_1) + nonce + org.toByteArray(), m["sig"] as ByteArray))
+
+        val dir = File("build/cross").apply { mkdirs() }
+        File(dir, "enrol.json").writeText(
+            JSONObject()
+                .put("public_key_hex", signer.publicKey.toHex())
+                .put("nonce_hex", nonce.toHex())
+                .put("org", org)
+                .put("answer_hex", answer.toHex())
+                .toString(2) + "\n",
+        )
+    }
 }

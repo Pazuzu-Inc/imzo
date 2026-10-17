@@ -51,11 +51,15 @@ data class Review(
 
 private const val MAX_COUNTER = 1L shl 53
 private val DOMAIN_APPROVE = "IMZO/1/approve\u0000".toByteArray(Charsets.ISO_8859_1)
+private val DOMAIN_ENROL = "IMZO/1/enrol\u0000".toByteArray(Charsets.ISO_8859_1)
 
 /** Port of the reference `Device`: review a request, then sign an approve/reject answer. */
 class Approver(private val signer: Signer, private val counters: CounterStore) {
-    /** `deviceId(signer.publicKey)`. */
-    val id: ByteArray = deviceId(signer.publicKey)
+    /**
+     * `deviceId(signer.publicKey)`. Lazy so an [Approver] can be built before the device key is
+     * readable (the key can be lost or need a screen lock); the failure then surfaces on first use.
+     */
+    val id: ByteArray by lazy { deviceId(signer.publicKey) }
 
     /** Parses (strictly) and summarises a request; `WRONG DEVICE` if it is addressed to another key. */
     fun review(requestBytes: ByteArray): Review {
@@ -90,5 +94,17 @@ class Approver(private val signer: Signer, private val counters: CounterStore) {
         val sig = signer.sign(DOMAIN_APPROVE + Cbor.dumps(body))
         if (sig.size != 64) throw ProtocolError("BAD FORMAT", "signature must be 64 bytes")
         return Cbor.dumps(body + ("sig" to sig))
+    }
+
+    /**
+     * Body of the `er` message: canonical CBOR `{"pub": public key, "sig": raw ECDSA}` where the
+     * signature covers `"IMZO/1/enrol\0" || nonce || org.utf8` (proof of possession, mirrors
+     * `Device.enrolment_answer`). Uses no counter. May throw whatever the signer throws.
+     */
+    suspend fun enrolmentAnswer(nonce: ByteArray, org: String): ByteArray {
+        if (nonce.size != 16) throw ProtocolError("BAD FORMAT", "nonce must be 16 bytes")
+        val sig = signer.sign(DOMAIN_ENROL + nonce + org.toByteArray(Charsets.UTF_8))
+        if (sig.size != 64) throw ProtocolError("BAD FORMAT", "signature must be 64 bytes")
+        return Cbor.dumps(linkedMapOf<String, Any>("pub" to signer.publicKey, "sig" to sig))
     }
 }

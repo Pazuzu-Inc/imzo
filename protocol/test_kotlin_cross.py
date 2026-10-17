@@ -24,6 +24,7 @@ from imzo_ref import ProtocolError
 HERE = Path(__file__).parent
 CASES = json.loads((HERE / "cases.json").read_text())
 RESPONSE_PATH = HERE.parent / "android" / "protocol" / "build" / "cross" / "response.json"
+ENROL_PATH = HERE.parent / "android" / "protocol" / "build" / "cross" / "enrol.json"
 
 RID = bytes(range(0x40, 0x50))
 NONCE = bytes(range(0x50, 0x60))
@@ -113,6 +114,63 @@ class KotlinCrossCheck(unittest.TestCase):
         server, _, _ = self.world()
         with self.assertRaises(ProtocolError) as cm:
             server.submit_response(bytes(mutated))
+        self.assertEqual(cm.exception.code, "BAD SIGNATURE")
+
+
+@unittest.skipUnless(ENROL_PATH.exists(), "run ./gradlew :protocol:test in android/ first")
+class KotlinEnrolmentCrossCheck(unittest.TestCase):
+    """The reference Server accepts the Kotlin enrolment answer (proof of possession over its challenge)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data = json.loads(ENROL_PATH.read_text())
+        cls.public_key = bytes.fromhex(cls.data["public_key_hex"])
+        cls.nonce = bytes.fromhex(cls.data["nonce_hex"])
+        cls.org = cls.data["org"]
+        cls.answer = bytes.fromhex(cls.data["answer_hex"])
+
+    def pending(self):
+        """A server with a pending enrolment whose nonce is the one Kotlin signed."""
+        server = imzo.Server(now=lambda: 1_800_000_000.0)
+        with mock.patch.object(imzo.os, "urandom", return_value=self.nonce):
+            nonce, body = server.begin_enrolment("alice", self.org)
+        self.assertEqual(nonce, self.nonce)
+        return server, body
+
+    def test_answer_is_canonical_cbor_with_the_two_fields(self):
+        obj = imzo.loads(self.answer)
+        self.assertEqual(set(obj), {"pub", "sig"})
+        self.assertEqual(obj["pub"], self.public_key)
+        self.assertEqual(imzo.dumps(obj), self.answer)
+
+    def test_reference_server_registers_the_kotlin_device(self):
+        server, _ = self.pending()
+        dev = server.finish_enrolment(self.answer)
+        self.assertEqual(dev, imzo.device_id(self.public_key))
+        self.assertEqual(server.devices[dev]["user"], "alice")
+
+    def test_challenge_is_single_use(self):
+        server, _ = self.pending()
+        server.finish_enrolment(self.answer)
+        with self.assertRaises(ProtocolError) as cm:
+            server.finish_enrolment(self.answer)
+        self.assertEqual(cm.exception.code, "BAD SIGNATURE")
+
+    def test_wrong_org_is_refused(self):
+        server = imzo.Server(now=lambda: 1_800_000_000.0)
+        with mock.patch.object(imzo.os, "urandom", return_value=self.nonce):
+            server.begin_enrolment("alice", "other-org")
+        with self.assertRaises(ProtocolError) as cm:
+            server.finish_enrolment(self.answer)
+        self.assertEqual(cm.exception.code, "BAD SIGNATURE")
+
+    def test_signature_bit_flip_is_refused(self):
+        sig_at = self.answer.index(imzo.loads(self.answer)["sig"])
+        mutated = bytearray(self.answer)
+        mutated[sig_at + 10] ^= 0x01
+        server, _ = self.pending()
+        with self.assertRaises(ProtocolError) as cm:
+            server.finish_enrolment(bytes(mutated))
         self.assertEqual(cm.exception.code, "BAD SIGNATURE")
 
 

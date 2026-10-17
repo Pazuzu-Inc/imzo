@@ -124,3 +124,22 @@ private fun validateRequest(obj: Any?): Request {
 
 /** Strict decode (canonical CBOR only) followed by the reference's validation. */
 fun parseRequest(data: ByteArray): Request = validateRequest(Cbor.loads(data))
+
+/** The server's enrolment challenge: a single-use nonce and the organisation the device joins. */
+class EnrolmentRequest(val nonce: ByteArray, val org: String)
+
+private const val MAX_ORG_BYTES = 128
+
+/** Strict decode of the `en` message body `{"v":1,"nonce":16 bytes,"org":text}` (see `Server.begin_enrolment`). */
+fun parseEnrolmentRequest(data: ByteArray): EnrolmentRequest {
+    val obj = Cbor.loads(data)
+    if (obj !is Map<*, *> || obj.keys != setOf("v", "nonce", "org")) throw ProtocolError(BAD, "wrong or missing fields")
+    if (obj["v"] != 1L) throw ProtocolError(BAD, "unsupported version")
+    val nonce = obj["nonce"]
+    if (nonce !is ByteArray || nonce.size != 16) throw ProtocolError(BAD, "nonce must be 16 bytes")
+    val org = obj["org"]
+    if (org !is String || org.isEmpty() || org.toByteArray(Charsets.UTF_8).size > MAX_ORG_BYTES) {
+        throw ProtocolError(BAD, "org must be short non-empty text")
+    }
+    return EnrolmentRequest(nonce, org)
+}
