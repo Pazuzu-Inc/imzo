@@ -17,10 +17,17 @@ interface CounterStore {
     fun next(): Long
 }
 
-/** What the device shows. Every field is derived from the signed request bytes, never from the claimed total. */
-data class Review(
-    val rid: ByteArray,
-    val h: ByteArray,
+/**
+ * What the device shows. Every field is derived from the signed request bytes, never from the claimed total.
+ *
+ * Only [Approver.review] can make one: the constructor is module-internal, so app code cannot pair
+ * display fields from one request with the id or hash of another. The byte arrays are private;
+ * [rid] and [h] hand out copies, so nothing a caller does to them can change what is signed.
+ */
+@ConsistentCopyVisibility
+data class Review internal constructor(
+    private val ridBytes: ByteArray,
+    private val hBytes: ByteArray,
     val fingerprint: String,
     val op: String,
     val ref: String,
@@ -29,15 +36,21 @@ data class Review(
     val items: List<Item>,
     val approval: Pair<Int, Int>,
 ) {
+    /** Request id (16 bytes); a fresh copy on every access. */
+    val rid: ByteArray get() = ridBytes.copyOf()
+
+    /** SHA-256 of the request bytes; a fresh copy on every access. */
+    val h: ByteArray get() = hBytes.copyOf()
+
     override fun equals(other: Any?): Boolean =
         this === other || (other is Review &&
-            rid.contentEquals(other.rid) && h.contentEquals(other.h) && fingerprint == other.fingerprint &&
+            ridBytes.contentEquals(other.ridBytes) && hBytes.contentEquals(other.hBytes) && fingerprint == other.fingerprint &&
             op == other.op && ref == other.ref && total == other.total && count == other.count &&
             items == other.items && approval == other.approval)
 
     override fun hashCode(): Int {
-        var r = rid.contentHashCode()
-        r = 31 * r + h.contentHashCode()
+        var r = ridBytes.contentHashCode()
+        r = 31 * r + hBytes.contentHashCode()
         r = 31 * r + fingerprint.hashCode()
         r = 31 * r + op.hashCode()
         r = 31 * r + ref.hashCode()
@@ -59,15 +72,18 @@ class Approver(private val signer: Signer, private val counters: CounterStore) {
      * `deviceId(signer.publicKey)`. Lazy so an [Approver] can be built before the device key is
      * readable (the key can be lost or need a screen lock); the failure then surfaces on first use.
      */
-    val id: ByteArray by lazy { deviceId(signer.publicKey) }
+    private val idBytes: ByteArray by lazy { deviceId(signer.publicKey) }
+
+    /** The device id; a fresh copy on every access, so a caller cannot change what [respond] signs. */
+    val id: ByteArray get() = idBytes.copyOf()
 
     /** Parses (strictly) and summarises a request; `WRONG DEVICE` if it is addressed to another key. */
     fun review(requestBytes: ByteArray): Review {
         val req = parseRequest(requestBytes)
-        if (!req.dev.contentEquals(id)) throw ProtocolError("WRONG DEVICE")
+        if (!req.dev.contentEquals(idBytes)) throw ProtocolError("WRONG DEVICE")
         return Review(
-            rid = req.rid,
-            h = MessageDigest.getInstance("SHA-256").digest(requestBytes),
+            ridBytes = req.rid.copyOf(),
+            hBytes = MessageDigest.getInstance("SHA-256").digest(requestBytes),
             fingerprint = fingerprint(requestBytes),
             op = req.op,
             ref = req.ref,
@@ -88,7 +104,7 @@ class Approver(private val signer: Signer, private val counters: CounterStore) {
         val ctr = counters.next()
         if (ctr !in 1..MAX_COUNTER) throw ProtocolError("COUNTER", "counter out of range") // the server would refuse it
         val body = linkedMapOf<String, Any>(
-            "v" to 1L, "rid" to review.rid, "dev" to id, "dec" to (if (approve) 1L else 0L),
+            "v" to 1L, "rid" to review.rid, "dev" to idBytes, "dec" to (if (approve) 1L else 0L),
             "ctr" to ctr, "h" to review.h,
         )
         val sig = signer.sign(DOMAIN_APPROVE + Cbor.dumps(body))

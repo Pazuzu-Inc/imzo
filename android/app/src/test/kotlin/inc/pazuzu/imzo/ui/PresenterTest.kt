@@ -1,7 +1,6 @@
 package inc.pazuzu.imzo.ui
 
 import inc.pazuzu.imzo.protocol.Item
-import inc.pazuzu.imzo.protocol.Review
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -32,23 +31,23 @@ class PresenterTest {
         assertEquals(listOf("bada fele kogi", "mumi puta rasi"), fingerprintLines("bada fele kogi mumi puta rasi"))
     }
 
-    private fun review(items: List<Item>, ap: Pair<Int, Int> = 2 to 3, ref: String = "Payroll October 2026") = Review(
-        rid = ByteArray(16), h = ByteArray(32), fingerprint = "bada fele kogi mumi puta rasi", op = "payroll",
-        ref = ref, total = items.sumOf { it.amount }, count = items.size, items = items, approval = ap,
-    )
+    private fun review(items: List<Item>, ap: Pair<Int, Int> = 2 to 3, ref: String = "Payroll October 2026") =
+        reviewOf(items, ap, ref)
 
     @Test
     fun reviewDisplayShowsEveryItemInFull() {
         val longName = "N".repeat(64)
         val items = sampleItems + Item(longName, "86000000000000000009", 1)
-        val d = ReviewPresenter.present(review(items))
+        val review = review(items)
+        val d = ReviewPresenter.present(review)
 
         assertEquals("payroll", d.op)
         assertEquals("Payroll October 2026", d.ref)
         assertEquals("Approval 2 of 3", d.approval)
         assertEquals("4", d.count)
         assertEquals(formatUzs(items.sumOf { it.amount }), d.total)
-        assertEquals(listOf("bada fele kogi", "mumi puta rasi"), d.fingerprint)
+        assertEquals(fingerprintLines(review.fingerprint), d.fingerprint)
+        assertEquals(2, d.fingerprint.size)
         assertEquals(4, d.items.size)
         for ((line, item) in d.items.zip(items)) {
             assertEquals(item.name, line.name) // never shortened

@@ -91,6 +91,36 @@ class FramesTest {
         }
     }
 
+    @Test
+    fun emptySidMeansRandomLikeTheReference() {
+        val a = Frames.encode("en", byteArrayOf(1, 2, 3), sid = "")
+        val b = Frames.encode("en", byteArrayOf(1, 2, 3), sid = "")
+        for (frames in listOf(a, b)) {
+            assertTrue(frames[0], frames[0].matches(Regex("IMQ1\\.en\\.[0-9a-f]{8}\\.1\\.1\\.[A-Za-z0-9_-]+")))
+            assertEquals("en", Frames.decode(frames).first) // and the assembler accepts it (empty sid is refused there)
+            FrameAssembler().add(frames[0])
+        }
+        assertTrue(a[0] != b[0])
+    }
+
+    @Test
+    fun encodeRefusesAFrameLongerThanTheDecoderAccepts() {
+        // chunk 1500 -> 2000 base64 characters + header: still within 2048
+        val ok = Frames.encode("rq", ByteArray(3000), chunk = 1500, sid = "00000001")
+        assertTrue(ok.all { it.length <= MAX_FRAME_CHARS })
+        for (frame in ok) FrameAssembler().add(frame)
+        // chunk 1600 -> 2134 characters of data alone: no decoder would take it
+        try {
+            Frames.encode("rq", ByteArray(3000), chunk = 1600, sid = "00000001")
+            fail("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {}
+        // the bound includes the header, so a long sid can push an otherwise fine frame over
+        try {
+            Frames.encode("rq", ByteArray(3000), chunk = 1500, sid = "s".repeat(100))
+            fail("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {}
+    }
+
     // ------------------------------------------------------------------ FrameAssembler
 
     private val body = ByteArray(700) { (it * 31).toByte() }
@@ -185,6 +215,40 @@ class FramesTest {
         // and the canonical form of the same data is accepted
         assertEquals(Progress(1, 1, "00000012"), a.add("IMQ1.rq.00000012.1.1.YWJjNSRBwg"))
         assertArrayEquals("abc".toByteArray(), a.result()!!.second)
+    }
+
+    @Test
+    fun assemblerCapsAccumulatedBytesAndResets() {
+        val limit = 16 * 1024 + 4 // payload = body + 4-byte CRC
+        val fits = Frames.encode("rq", ByteArray(16 * 1024), chunk = 1000, sid = "cccc0001")
+        val a = FrameAssembler()
+        for (f in fits) a.add(f)
+        assertEquals(limit, a.result()!!.second.size + 4)
+
+        val over = Frames.encode("rq", ByteArray(16 * 1024 + 1), chunk = 1000, sid = "cccc0002")
+        val b = FrameAssembler()
+        over.dropLast(1).forEach { b.add(it) }
+        val e = runCatching { b.add(over.last()) }.exceptionOrNull() as ProtocolError
+        assertEquals("BAD FORMAT", e.code)
+        assertEquals(null, b.result()) // reset
+        assertEquals(Progress(1, over.size, "cccc0002"), b.add(over[0])) // starts over
+
+        // many hostile max-size frames of one session never accumulate more than the cap
+        val c = FrameAssembler()
+        val big = "A".repeat(1800) // 1350 bytes each
+        var thrown = false
+        for (i in 1..30) {
+            try { c.add("IMQ1.rq.dddd0001.$i.256.$big") } catch (_: ProtocolError) { thrown = true; break }
+        }
+        assertTrue(thrown)
+    }
+
+    @Test
+    fun assemblerCountsAReplacedPartOnlyOnce() {
+        val a = FrameAssembler()
+        val frame = "IMQ1.rq.eeee0001.1.256." + "A".repeat(1800)
+        repeat(100) { a.add(frame) } // 100 repeats of one 1350-byte part: still 1350 bytes
+        assertEquals(Progress(1, 256, "eeee0001"), a.add(frame))
     }
 
     @Test

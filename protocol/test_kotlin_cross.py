@@ -2,7 +2,9 @@
 
 CrossCheckTest (Kotlin, `./gradlew :protocol:test` from android/) answers `cross_request_hex` from
 cases.json with a key derived from `cross_key_secret_hex` and writes
-android/protocol/build/cross/response.json. This test is skipped until that file exists.
+android/protocol/build/cross/response.json (approve), reject.json (reject) and enrol.json. These tests are
+skipped until those files exist, unless IMZO_REQUIRE_CROSS=1 is set: then a missing file is a failure
+(use that in CI / before a demo so a skipped cross-check cannot pass unnoticed).
 
 How the order is built: Server.create_order draws rid and nonce from os.urandom. We patch
 `imzo_ref.os.urandom` to return the two fixed values that make_cases used (rid, then nonce), so the
@@ -14,6 +16,7 @@ Run: python -m unittest test_kotlin_cross -v
 """
 
 import json
+import os
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -23,14 +26,35 @@ from imzo_ref import ProtocolError
 
 HERE = Path(__file__).parent
 CASES = json.loads((HERE / "cases.json").read_text())
-RESPONSE_PATH = HERE.parent / "android" / "protocol" / "build" / "cross" / "response.json"
-ENROL_PATH = HERE.parent / "android" / "protocol" / "build" / "cross" / "enrol.json"
+CROSS_DIR = HERE.parent / "android" / "protocol" / "build" / "cross"
+RESPONSE_PATH = CROSS_DIR / "response.json"
+REJECT_PATH = CROSS_DIR / "reject.json"
+ENROL_PATH = CROSS_DIR / "enrol.json"
+REQUIRE_CROSS = os.environ.get("IMZO_REQUIRE_CROSS") == "1"
+
+
+def needs_cross_file(path: Path):
+    """Skip while the Kotlin output is missing, but fail instead when IMZO_REQUIRE_CROSS=1."""
+    if REQUIRE_CROSS:
+        def require(cls):
+            original = cls.setUpClass.__func__
+
+            def setUpClass(klass):
+                if not path.exists():
+                    raise AssertionError(f"IMZO_REQUIRE_CROSS=1 but {path} is missing; run ./gradlew :protocol:test in android/")
+                original(klass)
+
+            cls.setUpClass = classmethod(setUpClass)
+            return cls
+
+        return require
+    return unittest.skipUnless(path.exists(), "run ./gradlew :protocol:test in android/ first")
 
 RID = bytes(range(0x40, 0x50))
 NONCE = bytes(range(0x50, 0x60))
 
 
-@unittest.skipUnless(RESPONSE_PATH.exists(), "run ./gradlew :protocol:test in android/ first")
+@needs_cross_file(RESPONSE_PATH)
 class KotlinCrossCheck(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -117,7 +141,65 @@ class KotlinCrossCheck(unittest.TestCase):
         self.assertEqual(cm.exception.code, "BAD SIGNATURE")
 
 
-@unittest.skipUnless(ENROL_PATH.exists(), "run ./gradlew :protocol:test in android/ first")
+@needs_cross_file(REJECT_PATH)
+class KotlinRejectCrossCheck(unittest.TestCase):
+    """The reference Server accepts a Kotlin REJECT (dec = 0): order REJECTED, nothing executed, audit row."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data = json.loads(REJECT_PATH.read_text())
+        cls.request = bytes.fromhex(cls.data["request_hex"])
+        cls.response = bytes.fromhex(cls.data["response_hex"])
+        cls.public_key = bytes.fromhex(cls.data["public_key_hex"])
+
+    def world(self):
+        server = imzo.Server(now=lambda: 1_800_000_000.0)
+        dev = server.register_device(self.public_key, "alice")
+        req = imzo.parse_request(self.request)
+        with mock.patch.object(imzo.os, "urandom", side_effect=[RID, NONCE]):
+            out = server.create_order(
+                order_id="ORD-KOTLIN", maker="mike", op=req["op"], ref=req["ref"],
+                items=req["items"], approvers=[dev],
+            )
+        self.assertEqual(out[dev], self.request)
+        return server, dev
+
+    def test_response_is_a_canonical_reject(self):
+        resp = imzo.validate_response(imzo.loads(self.response))
+        self.assertEqual((resp["dec"], resp["ctr"], resp["rid"]), (0, 1, RID))
+        self.assertEqual(imzo.dumps(imzo.loads(self.response)), self.response)
+
+    def test_reference_server_records_the_rejection(self):
+        server, dev = self.world()
+        self.assertEqual(server.submit_response(self.response), "REJECTED")
+        self.assertEqual(server.orders["ORD-KOTLIN"].status, "REJECTED")
+        self.assertEqual(server.executed, [])
+        rows = [r["event"] for r in server.audit if r["event"]["kind"] == "order_rejected"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["order"], "ORD-KOTLIN")
+        self.assertEqual(rows[0]["dev"], dev)
+        self.assertEqual(server.devices[dev]["last_ctr"], 1)
+        self.assertTrue(server.verify_audit())
+
+    def test_replayed_reject_is_refused(self):
+        server, _ = self.world()
+        server.submit_response(self.response)
+        with self.assertRaises(ProtocolError) as cm:
+            server.submit_response(self.response)
+        self.assertEqual(cm.exception.code, "NOT PENDING")
+
+    def test_signature_bit_flip_is_a_bad_signature(self):
+        sig_at = self.response.index(imzo.loads(self.response)["sig"])
+        mutated = bytearray(self.response)
+        mutated[sig_at + 10] ^= 0x01
+        server, _ = self.world()
+        with self.assertRaises(ProtocolError) as cm:
+            server.submit_response(bytes(mutated))
+        self.assertEqual(cm.exception.code, "BAD SIGNATURE")
+        self.assertEqual(server.orders["ORD-KOTLIN"].status, "PENDING")
+
+
+@needs_cross_file(ENROL_PATH)
 class KotlinEnrolmentCrossCheck(unittest.TestCase):
     """The reference Server accepts the Kotlin enrolment answer (proof of possession over its challenge)."""
 

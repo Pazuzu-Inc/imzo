@@ -1,8 +1,10 @@
 package inc.pazuzu.imzo.ui
 
+import inc.pazuzu.imzo.protocol.Approver
 import inc.pazuzu.imzo.protocol.Cbor
 import inc.pazuzu.imzo.protocol.CounterStore
 import inc.pazuzu.imzo.protocol.Item
+import inc.pazuzu.imzo.protocol.Review
 import inc.pazuzu.imzo.protocol.Signer
 import inc.pazuzu.imzo.protocol.derFromRaw
 import inc.pazuzu.imzo.protocol.rawFromDer
@@ -93,6 +95,12 @@ fun buildRequest(
         "total" to total, "ap" to listOf(ap.first.toLong(), ap.second.toLong()),
     ),
 )
+
+/** A genuine [Review] (the constructor is internal to :protocol): the request is built and parsed by the real [Approver]. */
+fun reviewOf(items: List<Item>, ap: Pair<Int, Int> = 1 to 1, ref: String = "Payroll October 2026"): Review {
+    val approver = Approver(TestSigner(), TestCounter())
+    return approver.review(buildRequest(dev = approver.id, items = items, ap = ap, ref = ref))
+}
 
 val sampleItems = listOf(
     Item("Aziza Karimova", "86000000000000000001", 450_000_000L),

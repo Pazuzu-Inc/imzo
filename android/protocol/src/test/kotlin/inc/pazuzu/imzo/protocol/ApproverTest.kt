@@ -5,6 +5,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -87,6 +88,50 @@ class ApproverTest {
             assertFalse(verifyRaw(signer.publicKey, signingInput(m) + 0, sig))
         }
         assertEquals(2L, counter.value)
+    }
+
+    @Test
+    fun mutatingReturnedArraysCannotChangeWhatRespondSigns() = runBlocking {
+        val signer = vectorSigner()
+        val approver = Approver(signer, MemoryCounter())
+        val review = approver.review(request)
+        val rid = review.rid.copyOf()
+        val id = approver.id.copyOf()
+        // every access hands out a fresh copy ...
+        assertNotSame(review.rid, review.rid)
+        assertNotSame(review.h, review.h)
+        assertNotSame(approver.id, approver.id)
+        // ... so scribbling over what a caller got changes nothing
+        review.rid.fill(0x7f)
+        review.h.fill(0x7f)
+        approver.id.fill(0x7f)
+        val m = parse(approver.respond(review, true))
+        assertArrayEquals(rid, m["rid"] as ByteArray)
+        assertArrayEquals(sha256(request), m["h"] as ByteArray)
+        assertArrayEquals(id, m["dev"] as ByteArray)
+        assertEquals(v.getString("device_id_hex"), (m["dev"] as ByteArray).toHex())
+        assertTrue(verifyRaw(signer.publicKey, signingInput(m), m["sig"] as ByteArray))
+        assertArrayEquals(rid, review.rid)
+    }
+
+    @Test
+    fun reviewDoesNotAliasTheRequestBytesTheCallerKeeps() = runBlocking {
+        val approver = Approver(vectorSigner(), MemoryCounter())
+        val bytes = request.copyOf()
+        val review = approver.review(bytes)
+        bytes.fill(0) // the caller reuses its buffer
+        assertArrayEquals(ByteArray(16) { it.toByte() }, review.rid)
+        assertArrayEquals(sha256(request), review.h)
+        assertEquals(sha256(request).toHex(), (parse(approver.respond(review, true))["h"] as ByteArray).toHex())
+    }
+
+    @Test
+    fun equalReviewsAreEqualByContent() {
+        val approver = Approver(vectorSigner(), MemoryCounter())
+        val a = approver.review(request)
+        val b = approver.review(request)
+        assertEquals(a, b)
+        assertEquals(a.hashCode(), b.hashCode())
     }
 
     @Test

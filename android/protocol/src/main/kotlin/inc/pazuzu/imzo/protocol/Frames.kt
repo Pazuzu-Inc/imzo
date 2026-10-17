@@ -1,5 +1,6 @@
 package inc.pazuzu.imzo.protocol
 
+import java.io.ByteArrayOutputStream
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.zip.CRC32
@@ -16,6 +17,13 @@ private const val MAX_PARTS = 256
  * characters; 2048 leaves room for larger chunks and long session ids.
  */
 internal const val MAX_FRAME_CHARS = 2048
+
+/**
+ * Hostile-input bound on one reassembled message, another Kotlin-side addition: the reference caps the
+ * CBOR message at 16 KiB, and the payload is that plus the 4-byte CRC32 trailer. [FrameAssembler]
+ * refuses to accumulate more, however many frames of up to [MAX_FRAME_CHARS] characters arrive.
+ */
+internal const val MAX_PAYLOAD_BYTES = 16 * 1024 + 4
 
 private val KINDS = setOf("rq", "rs", "en", "er")
 
@@ -67,7 +75,9 @@ internal fun parseFrame(frame: String): ParsedFrame {
 
 /** Joins the parts, checks the CRC32 trailer. Shared by [Frames.decode] and [FrameAssembler]. */
 private fun assemble(parts: Array<ByteArray?>): ByteArray {
-    val payload = parts.fold(ByteArray(0)) { acc, p -> acc + p!! }
+    val joined = ByteArrayOutputStream(parts.sumOf { it!!.size })
+    for (p in parts) joined.write(p!!)
+    val payload = joined.toByteArray()
     if (payload.size < 4) throw ProtocolError(BAD, "too short")
     val body = payload.copyOfRange(0, payload.size - 4)
     val crc = payload.copyOfRange(payload.size - 4, payload.size).fold(0L) { acc, b -> (acc shl 8) or (b.toLong() and 0xFF) }
@@ -79,7 +89,11 @@ private fun assemble(parts: Array<ByteArray?>): ByteArray {
 object Frames {
     private val random = SecureRandom()
 
-    /** Splits `body` + CRC32 into frames `IMQ1.<kind>.<sid>.<i>.<n>.<chunk>`; show them in a loop. */
+    /**
+     * Splits `body` + CRC32 into frames `IMQ1.<kind>.<sid>.<i>.<n>.<chunk>`; show them in a loop.
+     * A null or empty `sid` means a random one (like the reference's `sid or urandom`). Throws
+     * [IllegalArgumentException] if a frame would exceed [MAX_FRAME_CHARS] (lower the chunk size).
+     */
     fun encode(kind: String, body: ByteArray, chunk: Int = 200, sid: String? = null): List<String> {
         require(kind in KINDS) { "unknown kind" }
         require(chunk > 0) { "chunk must be positive" }
@@ -87,9 +101,11 @@ object Frames {
         val payload = body + ByteArray(4) { (crc shr (24 - 8 * it)).toByte() }
         val parts = (payload.indices step chunk).map { payload.copyOfRange(it, minOf(it + chunk, payload.size)) }
         require(parts.size <= MAX_PARTS) { "too many frames; raise the chunk size" } // the decoder would refuse them
-        val id = sid ?: ByteArray(4).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        val id = if (sid.isNullOrEmpty()) ByteArray(4).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) } else sid
         val enc = Base64.getUrlEncoder().withoutPadding()
-        return parts.mapIndexed { k, p -> "IMQ1.$kind.$id.${k + 1}.${parts.size}.${enc.encodeToString(p)}" }
+        val frames = parts.mapIndexed { k, p -> "IMQ1.$kind.$id.${k + 1}.${parts.size}.${enc.encodeToString(p)}" }
+        require(frames.all { it.length <= MAX_FRAME_CHARS }) { "frame longer than $MAX_FRAME_CHARS characters; lower the chunk size" } // the decoder would refuse it
+        return frames
     }
 
     /**
@@ -129,12 +145,14 @@ class FrameAssembler {
     private var total = 0
     private var parts: Array<ByteArray?> = emptyArray()
     private var have = 0
+    private var bytes = 0 // total size of the parts held, bounded by MAX_PAYLOAD_BYTES
 
     /**
      * Takes one scanned frame. A malformed frame (including one longer than [MAX_FRAME_CHARS], an
      * empty sid, or a declared count above 256) throws `ProtocolError("BAD FORMAT")` and leaves the
      * state untouched; everything is validated before any session storage is allocated.
-     * Repeats are fine (a repeated part replaces the earlier one, as in the reference).
+     * Repeats are fine (a repeated part replaces the earlier one, as in the reference). If the parts
+     * held would exceed [MAX_PAYLOAD_BYTES] the assembler is reset and `BAD FORMAT` is thrown.
      */
     fun add(frame: String): Progress {
         val f = parseFrame(frame)
@@ -143,8 +161,15 @@ class FrameAssembler {
             kind = f.kind; sid = f.sid; total = f.total
             parts = arrayOfNulls(total)
             have = 0
+            bytes = 0
         }
-        if (parts[f.index - 1] == null) have++
+        val replaced = parts[f.index - 1]
+        if (bytes - (replaced?.size ?: 0) + f.data.size > MAX_PAYLOAD_BYTES) {
+            reset()
+            throw ProtocolError(BAD, "message too large")
+        }
+        if (replaced == null) have++
+        bytes += f.data.size - (replaced?.size ?: 0)
         parts[f.index - 1] = f.data
         return Progress(have, total, sid)
     }
@@ -167,6 +192,6 @@ class FrameAssembler {
     }
 
     fun reset() {
-        kind = null; sid = ""; total = 0; parts = emptyArray(); have = 0
+        kind = null; sid = ""; total = 0; parts = emptyArray(); have = 0; bytes = 0
     }
 }
