@@ -259,6 +259,63 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(code_of(server.submit_response, b"\xff\xff"), "BAD FORMAT")
 
 
+class EnrolmentTests(unittest.TestCase):
+    def test_enrolment_round_trip_registers_the_device_for_the_user(self):
+        server = imzo.Server()
+        dev = imzo.Device()
+        nonce, body = server.begin_enrolment("alice", "demo")
+        self.assertEqual(imzo.loads(body), {"v": 1, "nonce": nonce, "org": "demo"})
+        answer = imzo.dumps(dev.enrolment_answer(nonce, "demo"))
+        self.assertEqual(server.finish_enrolment(answer), dev.id)
+        self.assertEqual(server.devices[dev.id]["user"], "alice")
+        self.assertEqual(server.devices[dev.id]["status"], "ACTIVE")
+        kinds = [r["event"]["kind"] for r in server.audit]
+        self.assertEqual(kinds, ["enrolment_started", "device_registered"])
+
+    def test_enrolment_signature_must_match_a_pending_challenge(self):
+        server = imzo.Server()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        dev = imzo.Device()
+        wrong_nonce = imzo.dumps(dev.enrolment_answer(os.urandom(16), "demo"))
+        wrong_org = imzo.dumps(dev.enrolment_answer(nonce, "other"))
+        self.assertEqual(code_of(server.finish_enrolment, wrong_nonce), "BAD SIGNATURE")
+        self.assertEqual(code_of(server.finish_enrolment, wrong_org), "BAD SIGNATURE")
+        self.assertEqual(server.devices, {})
+        # a signature from a different key than the one presented is also refused
+        good = dev.enrolment_answer(nonce, "demo")
+        forged = imzo.dumps({"pub": imzo.Device().public_key, "sig": good["sig"]})
+        self.assertEqual(code_of(server.finish_enrolment, forged), "BAD SIGNATURE")
+        self.assertEqual(server.devices, {})
+
+    def test_enrolment_garbage_is_a_bad_format(self):
+        server = imzo.Server()
+        server.begin_enrolment("alice")
+        self.assertEqual(code_of(server.finish_enrolment, b"\xff"), "BAD FORMAT")
+        self.assertEqual(code_of(server.finish_enrolment, imzo.dumps({"pub": b"x"})), "BAD FORMAT")
+        self.assertEqual(code_of(server.finish_enrolment, imzo.dumps({"pub": b"x" * 65, "sig": b"y" * 64})), "BAD FORMAT")
+
+    def test_enrolment_nonce_is_single_use(self):
+        server = imzo.Server()
+        dev = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        answer = imzo.dumps(dev.enrolment_answer(nonce, "demo"))
+        server.finish_enrolment(answer)
+        self.assertEqual(code_of(server.finish_enrolment, answer), "BAD SIGNATURE")
+        other = imzo.Device()
+        replay = imzo.dumps(other.enrolment_answer(nonce, "demo"))
+        self.assertEqual(code_of(server.finish_enrolment, replay), "BAD SIGNATURE")
+        self.assertNotIn(other.id, server.devices)
+
+    def test_expired_enrolment_challenge_is_refused(self):
+        clock = Clock()
+        server = imzo.Server(now=clock)
+        dev = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        clock.t += 301
+        answer = imzo.dumps(dev.enrolment_answer(nonce, "demo"))
+        self.assertEqual(code_of(server.finish_enrolment, answer), "BAD SIGNATURE")
+
+
 class FrameTests(unittest.TestCase):
     def setUp(self):
         self.body = os.urandom(1300)
