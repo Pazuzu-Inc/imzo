@@ -29,7 +29,7 @@ fun HomeScreen(deviceId: String, onScanOrder: () -> Unit, onEnrol: () -> Unit) {
         Text("Imzo", fontSize = 40.sp, fontWeight = FontWeight.Bold)
         // Always visible: the approver has no network permission at all.
         Text(
-            "No internet access: camera only",
+            "No internet permission: talks only through QR codes",
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             color = ApproveGreen,
