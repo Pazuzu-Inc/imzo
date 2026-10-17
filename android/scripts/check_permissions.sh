@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Usage: check_permissions.sh <apk>
-# Exits non-zero if the APK's merged manifest requests (or declares) any permission outside the
-# allowlist. The approver is camera + biometric only: in particular it must never hold INTERNET.
-# AAPT2 may point at the aapt2 binary; otherwise the newest one under $ANDROID_HOME/build-tools is used.
+# Fails closed: exits non-zero unless the APK's merged manifest requests/declares ONLY allowlisted
+# permissions and the dump was understood completely. The approver is camera + biometric only: in
+# particular it must never hold INTERNET.
+#   exit 0  all permissions allowlisted
+#   exit 1  a permission outside the allowlist
+#   exit 2  cannot tell (no aapt2, empty/unparseable dump, unparsed permission line, CAMERA missing)
+# AAPT2 may point at the aapt2 binary (tests use a stub); otherwise the newest one under
+# $ANDROID_HOME/build-tools is used.
 set -euo pipefail
 
 APK="${1:?usage: check_permissions.sh <apk>}"
@@ -22,11 +27,37 @@ ALLOWED=(
   "inc.pazuzu.imzo.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 )
 
-DUMP="$("$AAPT2" dump permissions "$APK")"
-# every "uses-permission[-sdk-23|...]: name='X'" and declared "permission: X" line
-FOUND="$(printf '%s\n' "$DUMP" | sed -nE "s/^(uses-permission[^:]*|permission): *(name=')?([^' ]+)'?.*/\3/p" | sort -u)"
+DUMP="$("$AAPT2" dump permissions "$APK")" || { echo "check_permissions: aapt2 failed" >&2; exit 2; }
+[ -n "${DUMP//[[:space:]]/}" ] || { echo "check_permissions: FAILED - empty aapt2 output" >&2; exit 2; }
+
+USES_RE="^[[:space:]]*uses-permission[A-Za-z0-9_-]*:[[:space:]]*name='([^']+)'"
+DECL_RE="^[[:space:]]*permission:[[:space:]]*([^[:space:]']+)"
+PKG_RE="^[[:space:]]*package:"
+
+FOUND=()
+unparsed=0
+while IFS= read -r line; do
+  if [[ "$line" =~ $USES_RE ]] || [[ "$line" =~ $DECL_RE ]]; then
+    FOUND+=("${BASH_REMATCH[1]}")
+  elif [[ ! "$line" =~ $PKG_RE ]] && [[ "$line" == *[Pp][Ee][Rr][Mm][Ii][Ss][Ss][Ii][Oo][Nn]* ]]; then
+    echo "  UNPARSED:  $line" >&2
+    unparsed=1
+  fi
+done <<< "$DUMP"
 
 echo "check_permissions: $APK"
+if [ "$unparsed" = 1 ]; then
+  echo "check_permissions: FAILED - a permission line in the aapt2 output was not understood" >&2
+  exit 2
+fi
+
+has_camera=0
+for p in ${FOUND[@]+"${FOUND[@]}"}; do [ "$p" = "android.permission.CAMERA" ] && has_camera=1; done
+if [ "$has_camera" = 0 ]; then
+  echo "check_permissions: FAILED - CAMERA not found, so the aapt2 output was not parsed correctly" >&2
+  exit 2
+fi
+
 bad=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
@@ -38,7 +69,7 @@ while IFS= read -r p; do
     echo "  FORBIDDEN: $p" >&2
     bad=1
   fi
-done <<< "$FOUND"
+done < <(printf '%s\n' "${FOUND[@]}" | sort -u)
 
 if [ "$bad" = 1 ]; then
   echo "check_permissions: FAILED - the APK requests a permission that is not on the allowlist" >&2

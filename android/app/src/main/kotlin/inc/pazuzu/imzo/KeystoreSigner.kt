@@ -1,5 +1,7 @@
 package inc.pazuzu.imzo
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -24,15 +26,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
-/** Base type for every way [KeystoreSigner.sign] can end without a signature. */
-sealed class SigningException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
-/** The user dismissed the prompt, or biometrics are locked out. Not an error to show in red. */
-class SigningCancelled(message: String) : SigningException(message)
-
-/** Anything else: key invalidated, hardware error, malformed signature. */
-class SigningFailed(message: String, cause: Throwable? = null) : SigningException(message, cause)
-
 /**
  * The approver's P-256 key, generated inside the Android Keystore (StrongBox when available, else
  * the TEE). The key is non-exportable and needs a fresh biometric / device-credential
@@ -41,15 +34,24 @@ class SigningFailed(message: String, cause: Throwable? = null) : SigningExceptio
  *
  * [activityProvider] is only invoked from [sign]; reading [publicKey] needs no UI or authentication.
  */
-class KeystoreSigner(private val activityProvider: () -> FragmentActivity) : Signer {
-    constructor(activity: FragmentActivity) : this({ activity })
+class KeystoreSigner(
+    context: Context,
+    private val activityProvider: () -> FragmentActivity,
+) : Signer {
+    constructor(activity: FragmentActivity) : this(activity.applicationContext, { activity })
 
-    override val publicKey: ByteArray by lazy { uncompressedPoint(loadOrCreatePublicKey()) }
+    private val registry = DeviceKeyRegistry(
+        AndroidKeystoreBackend,
+        PrefsKeyMarkerStore(context.applicationContext.getSharedPreferences(MARKER_FILE, Context.MODE_PRIVATE)),
+    )
+
+    /** Creates the key on the very first call only; throws [DeviceKeyLost] if it has gone missing since. */
+    override val publicKey: ByteArray by lazy { registry.publicKey() }
 
     override suspend fun sign(message: ByteArray): ByteArray {
         val signature = Signature.getInstance(ALGORITHM)
         try {
-            signature.initSign(privateKey())
+            signature.initSign(registry.keyForSigning()) // never creates a key
         } catch (e: KeyPermanentlyInvalidatedException) {
             throw SigningFailed("The device key was invalidated (biometrics changed); this device must be enrolled again", e)
         } catch (e: java.security.GeneralSecurityException) {
@@ -63,48 +65,6 @@ class KeystoreSigner(private val activityProvider: () -> FragmentActivity) : Sig
             throw e
         } catch (e: Exception) {
             throw SigningFailed("Signing failed: ${e.message}", e)
-        }
-    }
-
-    private fun privateKey(): PrivateKey {
-        val key = keyStore().getKey(ALIAS, null) as? PrivateKey
-        if (key != null) return key
-        loadOrCreatePublicKey() // key was missing: create it
-        return keyStore().getKey(ALIAS, null) as? PrivateKey
-            ?: throw SigningFailed("The device key is missing")
-    }
-
-    private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
-
-    private fun loadOrCreatePublicKey(): ECPublicKey {
-        (keyStore().getCertificate(ALIAS)?.publicKey as? ECPublicKey)?.let { return it }
-        return try {
-            generateKeyPair(strongBox = true)
-        } catch (_: StrongBoxUnavailableException) {
-            generateKeyPair(strongBox = false)
-        }
-    }
-
-    private fun generateKeyPair(strongBox: Boolean): ECPublicKey {
-        val spec = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
-            .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-            .setDigests(KeyProperties.DIGEST_SHA256)
-            .setUserAuthenticationRequired(true)
-            // timeout 0 = authentication is required for every single use, bound to the CryptoObject
-            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL)
-            .setInvalidatedByBiometricEnrollment(true)
-            .setIsStrongBoxBacked(strongBox)
-            .build()
-        try {
-            val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
-            generator.initialize(spec)
-            return generator.generateKeyPair().public as ECPublicKey
-        } catch (e: StrongBoxUnavailableException) {
-            throw e
-        } catch (e: java.security.GeneralSecurityException) {
-            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
-        } catch (e: java.security.ProviderException) {
-            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
         }
     }
 
@@ -148,7 +108,57 @@ class KeystoreSigner(private val activityProvider: () -> FragmentActivity) : Sig
 
     companion object {
         const val ALIAS = "imzo-device-key"
-        private const val PROVIDER = "AndroidKeyStore"
+        const val MARKER_FILE = "imzo_key_marker"
         private const val ALGORITHM = "SHA256withECDSA"
+    }
+}
+
+private const val PROVIDER = "AndroidKeyStore"
+
+/** [KeyMarkerStore] over SharedPreferences using `commit()`. */
+internal class PrefsKeyMarkerStore(private val prefs: SharedPreferences) : KeyMarkerStore {
+    override fun get(): String? = prefs.getString("key_sha256", null)
+
+    override fun commit(value: String): Boolean = prefs.edit().putString("key_sha256", value).commit()
+}
+
+/** The Android Keystore entry `imzo-device-key`. */
+internal object AndroidKeystoreBackend : DeviceKeyBackend {
+    private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
+
+    override fun existingPublicKey(): ByteArray? =
+        (keyStore().getCertificate(KeystoreSigner.ALIAS)?.publicKey as? ECPublicKey)?.let { uncompressedPoint(it) }
+
+    override fun privateKey(): PrivateKey? = keyStore().getKey(KeystoreSigner.ALIAS, null) as? PrivateKey
+
+    override fun create(): ByteArray = uncompressedPoint(
+        try {
+            generateKeyPair(strongBox = true)
+        } catch (_: StrongBoxUnavailableException) {
+            generateKeyPair(strongBox = false)
+        },
+    )
+
+    private fun generateKeyPair(strongBox: Boolean): ECPublicKey {
+        val spec = KeyGenParameterSpec.Builder(KeystoreSigner.ALIAS, KeyProperties.PURPOSE_SIGN)
+            .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .setUserAuthenticationRequired(true)
+            // timeout 0 = authentication is required for every single use, bound to the CryptoObject
+            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL)
+            .setInvalidatedByBiometricEnrollment(true)
+            .setIsStrongBoxBacked(strongBox)
+            .build()
+        try {
+            val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
+            generator.initialize(spec)
+            return generator.generateKeyPair().public as ECPublicKey
+        } catch (e: StrongBoxUnavailableException) {
+            throw e
+        } catch (e: java.security.GeneralSecurityException) {
+            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
+        } catch (e: java.security.ProviderException) {
+            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
+        }
     }
 }

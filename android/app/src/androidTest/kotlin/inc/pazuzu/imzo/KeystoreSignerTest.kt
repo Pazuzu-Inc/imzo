@@ -1,5 +1,6 @@
 package inc.pazuzu.imzo
 
+import androidx.test.core.app.ApplicationProvider
 import java.security.KeyStore
 import java.security.PrivateKey
 import org.junit.Assert.assertArrayEquals
@@ -9,7 +10,7 @@ import org.junit.Test
 
 /** Only reads the public key / key metadata, so no biometric prompt and no Activity are needed. */
 class KeystoreSignerTest {
-    private fun signer() = KeystoreSigner { error("no UI in this test") }
+    private fun signer() = KeystoreSigner(ApplicationProvider.getApplicationContext()) { error("no UI in this test") }
 
     @Test
     fun publicKeyIsStableAndUncompressed() {
