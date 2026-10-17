@@ -17,8 +17,8 @@ public:
 
     // Review pages. page 0 = summary, 1..count = one beneficiary each, count+1 = decision.
     void showReviewPage(const imzo::Review& r, size_t page);
-    /** 0..1 progress of a button hold on the decision page; side is 'A' (approve) or 'B' (reject). */
-    void showHold(char side, float fraction);
+    /** Three dots at the bottom: `count` of the 3 clicks made so far in the current series. */
+    void showClicks(int count);
 
     void showEnrolCode(const std::string& code, const std::string& org);
     /** One QR frame of an answer. `title` says what to do with it; `index`/`count` count the frames. */

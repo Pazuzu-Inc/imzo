@@ -143,7 +143,7 @@ void Ui::showReviewPage(const imzo::Review& r, size_t page) {
         text(10, 140, total, 2, C_GREEN);
         text(10, 176, std::to_string((unsigned long)n) + (n == 1 ? " beneficiary" : " beneficiaries"), 2, C_WHITE);
         text(10, 206, "Check code: " + r.fingerprint, 1, C_CYAN);
-        footer("A: first beneficiary    B: cancel");
+        footer("Click: first beneficiary");
     } else if (page <= n) {
         const imzo::Item& it = r.items[page - 1];
         header("BENEFICIARY", C_AMBER, std::to_string((unsigned long)page) + " / " + std::to_string((unsigned long)n));
@@ -154,24 +154,29 @@ void Ui::showReviewPage(const imzo::Review& r, size_t page) {
         text(10, 160, it.account, 2, C_CYAN);
         text(10, 190, "AMOUNT", 1, C_GREY);
         text(100, 192, imzo::formatAmount(it.amount) + " UZS", 2, C_GREEN);
-        footer("A: next    B: back");
+        footer("Click: next");
     } else {
         header("DECISION", C_AMBER);
         text(10, 62, "Total", 1, C_GREY);
         text(10, 100, total, 2, C_GREEN);
         text(10, 134, std::to_string((unsigned long)n) + (n == 1 ? " beneficiary" : " beneficiaries") + "   check " + r.fingerprint, 1, C_CYAN);
-        gfx->fillRect(10, 156, 250, 50, 0x0320);
-        text(22, 188, "HOLD A: APPROVE", 1, C_WHITE);
-        gfx->fillRect(276, 156, 250, 50, 0x8000);
-        text(288, 188, "HOLD B: REJECT", 1, C_WHITE);
-        footer("Hold 1.5 s.  Short B: back to the list.");
+        gfx->fillRect(10, 152, 168, 40, 0x2104);
+        text(18, 178, "1 click: review", 1, C_WHITE);
+        gfx->fillRect(184, 152, 168, 40, 0x8000);
+        text(192, 178, "2 clicks: REJECT", 1, C_WHITE);
+        gfx->fillRect(358, 152, 168, 40, 0x0320);
+        text(366, 178, "3 clicks: APPROVE", 1, C_WHITE);
+        footer("Click the button, then wait a moment after the last click.");
     }
 }
 
-void Ui::showHold(char side, float f) {
-    int x = side == 'A' ? 10 : 276;
-    gfx->fillRect(x, 208, 250, 6, C_BLACK);
-    gfx->fillRect(x, 208, int(250 * f), 6, side == 'A' ? C_GREEN : C_RED);
+void Ui::showClicks(int count) {
+    for (int i = 0; i < 3; i++) {
+        int x = W / 2 - 30 + i * 30;
+        gfx->fillCircle(x, 216, 9, C_BLACK);
+        if (i < count) gfx->fillCircle(x, 216, 8, count == 3 ? C_GREEN : C_AMBER);
+        else gfx->drawCircle(x, 216, 8, C_GREY);
+    }
 }
 
 void Ui::showEnrolCode(const std::string& code, const std::string& org) {
@@ -179,7 +184,7 @@ void Ui::showEnrolCode(const std::string& code, const std::string& org) {
     header("ENROL THIS DEVICE", C_AMBER, org);
     text(10, 56, "Compare with the laptop. Same six digits?", 1, C_WHITE);
     textCentre(130, code, 4, C_CYAN);
-    footer("HOLD A: yes, show enrolment QR    B: cancel");
+    footer("3 clicks: yes, show QR     2 clicks: cancel");
 }
 
 void Ui::showQr(const std::string& title, const std::string& s, size_t index, size_t count) {
@@ -211,5 +216,5 @@ void Ui::showQr(const std::string& title, const std::string& s, size_t index, si
     text(260, 90, "Show this QR to the", 1, C_WHITE);
     text(260, 110, "laptop camera.", 1, C_WHITE);
     if (count > 1) text(260, 150, "Part " + std::to_string((unsigned long)index) + " of " + std::to_string((unsigned long)count), 1, C_GREY);
-    text(260, 190, "A: done", 1, C_GREY);
+    text(260, 190, "Click: done", 1, C_GREY);
 }

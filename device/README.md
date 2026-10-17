@@ -1,6 +1,6 @@
 # Imzo Device (ESP32-S3, LilyGO T-Display S3 AMOLED)
 
-A second approver for the same protocol as the Android app: it takes `IMQ1` frames, shows every beneficiary on its 536x240 screen, signs after a 1.5 second button hold and shows the answer as a QR. Design: [`docs/superpowers/specs/2026-10-17-imzo-device-design.md`](../docs/superpowers/specs/2026-10-17-imzo-device-design.md).
+A second approver for the same protocol as the Android app: it takes `IMQ1` frames, shows every beneficiary on its 536x240 screen, signs after three clicks of the BOOT button and shows the answer as a QR. Only BOOT is usable as a control; the board's other button resets the chip. Design: [`docs/superpowers/specs/2026-10-17-imzo-device-design.md`](../docs/superpowers/specs/2026-10-17-imzo-device-design.md).
 
 | Path | What |
 | --- | --- |
@@ -43,10 +43,10 @@ The dev firmware (`-DIMZO_DEV_SERIAL` in `platformio.ini`) also reads frames and
 
 ```bash
 ~/dev/pio-venv/bin/python device/tools/bridge.py reset
-~/dev/pio-venv/bin/python device/tools/bridge.py enrol alice                      # the device presses its own button
+~/dev/pio-venv/bin/python device/tools/bridge.py enrol alice                      # the script clicks for the device
 ~/dev/pio-venv/bin/python device/tools/bridge.py order alice --decision approve   # Run 1
 ~/dev/pio-venv/bin/python device/tools/bridge.py order alice --tamper --decision reject   # Run 2
-~/dev/pio-venv/bin/python device/tools/bridge.py order alice --decision manual    # you press the buttons on the device
+~/dev/pio-venv/bin/python device/tools/bridge.py order alice --decision manual    # you click the button on the device
 ```
 
 For the shipping firmware remove `-DIMZO_DEV_SERIAL`: the device then reads frames only from the scanner UART (`Serial1`, RX GPIO44, TX GPIO43, 9600 baud, override with `-DIMZO_SCANNER_BAUD=...`).

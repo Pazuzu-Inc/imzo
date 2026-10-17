@@ -93,7 +93,7 @@ def collect_answer(dev: Device, seconds: float) -> list[str]:
             if len(frames) == int(line.split(".")[4]):
                 break
     if frames:
-        dev.send("BTN A")  # leave the answer-QR screen, like pressing A on the device
+        dev.send("CLICK")  # leave the answer-QR screen, like clicking the button
         time.sleep(0.3)
     return frames
 
@@ -111,9 +111,9 @@ def do_enrol(dev: Device, user: str, auto: bool) -> int:
     code = st.split("code=")[1]
     print(f"device shows enrolment code {code}")
     if auto:
-        dev.send("HOLD A")
+        dev.send("CLICK3")
     else:
-        print("hold A on the device for 1.5 s to continue ...")
+        print("click the button three times on the device to continue ...")
     frames = collect_answer(dev, 60 if not auto else 10)
     if not frames:
         print("no enrolment answer from the device")
@@ -146,12 +146,12 @@ def do_order(dev: Device, approver: str, maker: str, tamper: bool, decision: str
     print("device is on the review screen")
     n = len(items)
     if decision == "manual":
-        print("review on the device and hold A (approve) or B (reject) for 1.5 s ...")
+        print("review on the device; on the last page: 3 clicks approve, 2 clicks reject ...")
     else:
         for _ in range(n + 1):  # summary -> every beneficiary -> decision page
-            dev.send("BTN A")
+            dev.send("CLICK")
             time.sleep(0.25)
-        dev.send("HOLD A" if decision == "approve" else "HOLD B")
+        dev.send("CLICK3" if decision == "approve" else "CLICK2")
     frames = collect_answer(dev, 90 if decision == "manual" else 10)
     if not frames:
         print("no answer from the device")
@@ -173,7 +173,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("enrol")
     e.add_argument("user")
-    e.add_argument("--manual", action="store_true", help="wait for you to hold A on the device")
+    e.add_argument("--manual", action="store_true", help="wait for you to click the button three times on the device")
     o = sub.add_parser("order")
     o.add_argument("approver")
     o.add_argument("--maker", default="mike")

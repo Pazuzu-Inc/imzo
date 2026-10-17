@@ -52,7 +52,14 @@ std::string answerKind;
 uint32_t errorAt = 0;
 size_t answerChunk = 64;  // bytes of body per answer frame: small frames give a small, easy-to-read QR
 uint32_t progressDrawnAt = 0;
-float lastHold = 0;
+
+// One button, click series. On the decision page: 1 click = look again, 2 clicks = REJECT, 3 clicks = APPROVE.
+// Approve fires on the third click at once; the shorter series fire after a pause (RESOLVE_MS) so that a
+// slow third click cannot be mistaken for them. Rejecting is the safe action, so it may be easy.
+constexpr uint32_t CLICK_GAP_MS = 1200;  // longest pause between clicks of one series
+constexpr uint32_t RESOLVE_MS = 1000;    // pause after the last click before a 1- or 2-click series counts
+int clickCount = 0;
+uint32_t lastClickAt = 0;
 
 struct LineReader {
     std::string buf;
@@ -139,7 +146,7 @@ void dispatch(const std::string& kind, const Bytes& body) {
         review = imzo::review(body, ownId);
         page = 0;
         mode = Mode::Review;
-        lastHold = 0;
+        clickCount = 0;
         showReview();
     } else if (kind == "en") {
         challenge = imzo::parseEnrolmentChallenge(body);
@@ -181,35 +188,72 @@ void decide(bool approve) {
     }
 }
 
-void onButton(Btn ev) {
-    if (ev == Btn::None) return;
+void resetClicks() { clickCount = 0; }
+
+/** Counts a click; returns the length of the series so far. */
+int countClick() {
+    uint32_t now = millis();
+    if (now - lastClickAt > CLICK_GAP_MS) clickCount = 0;
+    clickCount++;
+    lastClickAt = now;
+    return clickCount;
+}
+
+void startEnrolAnswer() {
+    try {
+        Bytes ans = imzo::enrolmentAnswer(challenge, key);
+        toAnswer("er", ans, "ENROLMENT");
+    } catch (const ProtocolError& e) {
+        toError(e.code, e.detail);
+    }
+}
+
+void onClick() {
     switch (mode) {
         case Mode::Idle: break;
-        case Mode::Error: toIdle(); break;
+        case Mode::Error:
+        case Mode::Answer: resetClicks(); toIdle(); break;
         case Mode::Review: {
             size_t last = review.count + 1;
-            if (ev == Btn::AShort && page < last) { page++; showReview(); }
-            else if (ev == Btn::BShort && page > 0) { page--; showReview(); }
-            else if (ev == Btn::BShort && page == 0) { toIdle(); }  // abandon the order, nothing is signed
-            else if (page == last && ev == Btn::AHold) decide(true);
-            else if (page == last && ev == Btn::BHold) decide(false);
-            break;
-        }
-        case Mode::Enrol:
-            if (ev == Btn::AHold) {
-                try {
-                    Bytes ans = imzo::enrolmentAnswer(challenge, key);
-                    toAnswer("er", ans, "ENROLMENT");
-                } catch (const ProtocolError& e) {
-                    toError(e.code, e.detail);
-                }
-            } else if (ev == Btn::BShort || ev == Btn::BHold) {
-                toIdle();
+            if (page < last) {  // a single click moves on at once
+                resetClicks();
+                page++;
+                showReview();
+                break;
+            }
+            int n = countClick();
+            if (n >= 3) {
+                resetClicks();
+                decide(true);
+            } else {
+                ui.showClicks(n);
             }
             break;
-        case Mode::Answer:
-            if (ev == Btn::AShort || ev == Btn::AHold) toIdle();
+        }
+        case Mode::Enrol: {
+            int n = countClick();
+            if (n >= 3) {
+                resetClicks();
+                startEnrolAnswer();
+            } else {
+                ui.showClicks(n);
+            }
             break;
+        }
+    }
+}
+
+/** A short series that has gone quiet: decide what it meant. */
+void resolveSeries() {
+    if (clickCount == 0 || millis() - lastClickAt < RESOLVE_MS) return;
+    int n = clickCount;
+    resetClicks();
+    if (mode == Mode::Review) {
+        if (n == 2) decide(false);
+        else { page = 0; showReview(); }  // one click: start the list again
+    } else if (mode == Mode::Enrol) {
+        if (n == 2) toIdle();
+        else ui.showEnrolCode(imzo::enrolmentCode(key.publicKey()), challenge.org);
     }
 }
 
@@ -218,10 +262,9 @@ void onButton(Btn ev) {
 void handleDevCommand(const std::string& line) {
     if (line == "PING") {
         devlog("INFO dev=" + hex(ownId) + " pub=" + hex(key.publicKey()) + " ctr=" + std::to_string((unsigned long)key.counter()));
-    } else if (line == "BTN A") onButton(Btn::AShort);
-    else if (line == "BTN B") onButton(Btn::BShort);
-    else if (line == "HOLD A") onButton(Btn::AHold);
-    else if (line == "HOLD B") onButton(Btn::BHold);
+    } else if (line == "CLICK") onClick();
+    else if (line == "CLICK2") { onClick(); onClick(); }
+    else if (line == "CLICK3") { onClick(); onClick(); onClick(); }
     else if (line.rfind("CHUNK ", 0) == 0) {
         long n = atol(line.c_str() + 6);
         if (n >= 20 && n <= 200) answerChunk = size_t(n);
@@ -267,18 +310,8 @@ void loop() {
         else handleDevCommand(line);
     }
 #endif
-    onButton(buttons.poll());
-
-    if (mode == Mode::Review && page == review.count + 1) {
-        char side = 'A';
-        float f = buttons.holdProgress(side);
-        if (f > 0) {
-            ui.showHold(side, f);
-        } else if (lastHold > 0) {
-            showReview();  // released early: redraw the page without the bar
-        }
-        lastHold = f;
-    }
+    if (buttons.clicked()) onClick();
+    resolveSeries();
     if (mode == Mode::Answer && answerFrames.size() > 1 && millis() - answerShownAt > 900) {
         answerIdx = (answerIdx + 1) % answerFrames.size();
         showAnswerFrame();

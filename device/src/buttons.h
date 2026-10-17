@@ -1,27 +1,18 @@
-// Two buttons: A = BOOT (GPIO0), B = KEY (GPIO21) on the T-Display S3 AMOLED. Active low.
+// One usable button: BOOT (GPIO0) on the T-Display S3 AMOLED, active low. The board's second button is the
+// chip reset, so it cannot be used as a control. Only plain clicks are reported; counting a series of clicks
+// is done by the caller (see main.cpp).
 #pragma once
 
 #include <Arduino.h>
 
-enum class Btn : uint8_t { None, AShort, BShort, AHold, BHold };
-
 class Buttons {
 public:
     void begin();
-    /** Call often. A hold fires once after HOLD_MS while the button is still down; its release gives nothing. */
-    Btn poll();
-    /** 0 when nothing is held, else 0..1 progress toward a hold, and which side. */
-    float holdProgress(char& side) const;
-
-    static constexpr uint32_t HOLD_MS = 1500;
+    /** Call often. True once per click, when the button is released after a real press (bounce is ignored). */
+    bool clicked();
 
 private:
-    struct One {
-        uint8_t pin;
-        bool down = false;
-        bool fired = false;
-        uint32_t since = 0;
-    };
-    One a_{0}, b_{21};
-    Btn step(One& b, Btn shortEv, Btn holdEv);
+    static constexpr uint8_t PIN = 0;
+    bool down_ = false;
+    uint32_t since_ = 0;
 };
