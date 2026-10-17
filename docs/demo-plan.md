@@ -70,3 +70,7 @@ The device is **not on the critical path**. The pitch already presents it as the
 ## My defaults (confirmed by going ahead)
 
 Kotlin and Compose for the app; Python backend on the laptop; static web page for the initiator; ZXing instead of ML Kit; the app enrols by showing a QR that the laptop scans; payroll data is the 12 fake people from the demo script.
+
+## Tuning (pending device test)
+
+To fill in after the first device run of the Task 8 scan scaffold: chunk size (default 200 bytes, about 290 characters per frame, QR version 13 at ECC M), request player fps, scan time for the 12-person payroll, and what worked on the laptop screen (brightness, distance, ECC level).
