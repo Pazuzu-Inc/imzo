@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Added by androidx.biometric for API < 28; minSdk is 30, and USE_BIOMETRIC is already merged in. -->
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" tools:node="remove" />
 
     <uses-feature
         android:name="android.hardware.camera"
