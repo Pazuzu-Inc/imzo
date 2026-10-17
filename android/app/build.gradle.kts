@@ -32,6 +32,12 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        // android.jar stubs return defaults instead of throwing "not mocked" (lets a unit test construct
+        // KeyPermanentlyInvalidatedException); nothing under test calls the framework.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 kotlin {

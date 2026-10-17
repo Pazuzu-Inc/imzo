@@ -59,10 +59,8 @@ class KeystoreSigner(
         val signature = Signature.getInstance(ALGORITHM)
         try {
             signature.initSign(registry.keyForSigning()) // never creates a key
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            throw SigningFailed("The device key was invalidated (biometrics changed); this device must be enrolled again", e)
         } catch (e: java.security.GeneralSecurityException) {
-            throw SigningFailed("The device key is not usable: ${e.message}", e)
+            throw initSignFailure(e)
         }
         val authenticated = withContext(Dispatchers.Main) { authenticate(activityProvider(), signature) }
         try {
@@ -122,6 +120,18 @@ class KeystoreSigner(
         private const val ALGORITHM = "SHA256withECDSA"
     }
 }
+
+/**
+ * What a failed `initSign` means. A biometric change permanently invalidates the key: the device
+ * identity is gone, exactly like a missing key, so it is [DeviceKeyLost] (the dedicated key-lost
+ * screen), not a notice the user could retry.
+ */
+internal fun initSignFailure(e: java.security.GeneralSecurityException): Exception =
+    if (e is KeyPermanentlyInvalidatedException) {
+        DeviceKeyLost("the device key was invalidated (biometrics changed); enrol this device again").also { it.initCause(e) }
+    } else {
+        SigningFailed("The device key is not usable: ${e.message}", e)
+    }
 
 private const val PROVIDER = "AndroidKeyStore"
 

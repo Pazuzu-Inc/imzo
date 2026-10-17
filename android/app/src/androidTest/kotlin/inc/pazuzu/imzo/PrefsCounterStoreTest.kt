@@ -27,11 +27,12 @@ class PrefsCounterStoreTest {
     }
 
     @Test
-    fun valueSurvivesAFreshPreferencesObject() {
+    fun valueIsWrittenToThePreferencesFile() {
         val store = PrefsCounterStore(context, file)
         store.next()
         store.next()
-        // read the file back through a separate SharedPreferences handle
+        // read the stored value back through the app's own SharedPreferences for that file (Android hands out
+        // one shared in-process instance per file; this shows the key and value, not a new disk read)
         assertEquals(2L, context.getSharedPreferences(file, Context.MODE_PRIVATE).getLong(DurableCounter.KEY, -1))
     }
 

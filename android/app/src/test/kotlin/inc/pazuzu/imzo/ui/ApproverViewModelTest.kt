@@ -296,6 +296,24 @@ class ApproverViewModelTest {
     }
 
     @Test
+    fun keyInvalidatedWhileSigningIsTheDedicatedKeyLostState() {
+        // KeystoreSigner.sign throws DeviceKeyLost when a biometric change invalidated the key
+        reviewMyRequest()
+        signer.beforeSign = { throw DeviceKeyLost("the device key was invalidated (biometrics changed)") }
+        vm.approve()
+        assertEquals(UiState.DeviceKeyLost, state) // not a notice on the review screen
+        assertEquals(1L, counter.value) // the counter was taken before the failed signature, as documented
+    }
+
+    @Test
+    fun keyInvalidatedWhileEnrollingIsTheDedicatedKeyLostState() {
+        vm.startEnrol()
+        signer.beforeSign = { throw DeviceKeyLost("the device key was invalidated (biometrics changed)") }
+        frames("en", enrolRequest(), chunk = 20).forEach { vm.onEnrolRequestFrame(it) }
+        assertEquals(UiState.DeviceKeyLost, state)
+    }
+
+    @Test
     fun noScreenLockIsADedicatedState() {
         signer = TestSigner().apply { publicKeyError = IllegalStateException("Cannot create the device key") }
         vm = ApproverViewModel(Approver(signer, TestCounter())) { signer.publicKey }
