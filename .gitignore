@@ -11,3 +11,5 @@ android/**/build/
 .idea/
 android/.kotlin/
 *.iml
+*.keystore
+*.jks
