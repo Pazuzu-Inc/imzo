@@ -55,7 +55,8 @@ class MainActivity : FragmentActivity() {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        CameraScreen()
+                        // Debug builds swap the hello preview for the scan/play scaffold (Task 8, throwaway).
+                        CameraScreen { if (BuildConfig.DEBUG) DebugScanScaffold() else CameraPreview() }
                         if (BuildConfig.DEBUG) {
                             SignProbe(this@MainActivity, Modifier.align(Alignment.BottomCenter))
                         }
@@ -92,7 +93,7 @@ private fun SignProbe(activity: FragmentActivity, modifier: Modifier) {
 }
 
 @Composable
-private fun CameraScreen() {
+private fun CameraScreen(whenGranted: @Composable () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     fun hasPermission() =
@@ -118,7 +119,7 @@ private fun CameraScreen() {
     }
 
     if (granted) {
-        CameraPreview()
+        whenGranted()
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -142,7 +143,7 @@ private fun CameraScreen() {
 }
 
 @Composable
-private fun CameraPreview() {
+internal fun CameraPreview() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var noCamera by remember { mutableStateOf(false) }
