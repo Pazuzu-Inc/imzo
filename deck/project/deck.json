@@ -1,0 +1,45 @@
+{
+  "v": 4,
+  "createdOnFiles": { "v": 1, "at": "2026-10-15T12:00:00Z" },
+  "lists": "css",
+  "title": "Imzo: hackathon pitch",
+  "order": [
+    "cover",
+    "problem",
+    "why-now",
+    "solution",
+    "demo",
+    "architecture",
+    "rules",
+    "limits",
+    "pilot",
+    "close",
+    "b-sequence",
+    "b-lanes",
+    "b-lifecycle",
+    "b-protocol",
+    "b-qa",
+    "b-sources"
+  ],
+  "sections": {
+    "pitch": {
+      "description": "The five-minute pitch: problem, solution, live demo, limits and the ask.",
+      "start": "cover"
+    },
+    "backup": {
+      "description": "Backup slides for questions: sequence, process lanes, lifecycle, protocol, Q&A and sources.",
+      "start": "b-sequence"
+    }
+  },
+  "faces": {
+    "ibm-plex-sans": {
+      "family": "IBM Plex Sans",
+      "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    },
+    "jetbrains-mono": {
+      "family": "JetBrains Mono",
+      "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+    }
+  },
+  "designSystems": []
+}

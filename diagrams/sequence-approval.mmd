@@ -1,0 +1,24 @@
+%% Imzo: one approval, end to end.
+sequenceDiagram
+  autonumber
+  participant I as Initiator (laptop)
+  participant S as Approval service
+  participant D as Imzo app (phone)
+  actor P as Approver
+  participant C as Core (mock)
+  I->>S: POST /orders (items, approvers)
+  S-->>I: order id + one request per approver device
+  I->>D: request QR frames (no network)
+  D->>D: strict parse, recompute total, fingerprint
+  D->>P: show amount, items, fingerprint
+  P->>D: confirm with biometric (or reject)
+  D->>D: sign with Keystore key, counter + 1
+  D->>I: answer QR frames (signed)
+  I->>S: POST /answers
+  S->>S: verify hash, signature, counter, expiry, maker-checker
+  alt approved by every required approver
+    S->>C: execute the stored order
+    S-->>I: status executed
+  else rejected, invalid or expired
+    S-->>I: status not executed (audit event written)
+  end

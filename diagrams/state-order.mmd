@@ -1,0 +1,17 @@
+%% Imzo: order lifecycle. A failed verification does not change the state; it writes an audit event.
+stateDiagram-v2
+  [*] --> Draft: create
+  Draft --> Pending: submit
+  Draft --> Cancelled: maker cancels
+  Pending --> Approved: one approval is enough
+  Pending --> PartlyApproved: first approval
+  PartlyApproved --> Approved: last approval
+  Pending --> Rejected: signed rejection
+  PartlyApproved --> Rejected: signed rejection
+  Pending --> Expired: time runs out
+  PartlyApproved --> Expired: time runs out
+  Approved --> Executed: core confirms
+  Executed --> [*]
+  Rejected --> [*]
+  Expired --> [*]
+  Cancelled --> [*]

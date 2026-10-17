@@ -1,0 +1,25 @@
+%% Imzo: components and trust zones. Render at https://mermaid.live or with mermaid-cli.
+flowchart LR
+  subgraph APPROVER["Approver phone (trusted to sign)"]
+    direction TB
+    A1["Scan + strict parse"] --> A2["Review<br/>recomputes totals"] --> A3["Sign + show answer<br/>biometric or PIN"]
+    AX[("Android Keystore<br/>P-256 key, never exported")]
+    A3 --- AX
+  end
+  subgraph INITIATOR["Initiator (not trusted)"]
+    direction TB
+    I1["Order builder<br/>demo tamper switch"] --> I2["QR player<br/>request frames"]
+    I3["QR scanner<br/>webcam, answers"]
+  end
+  subgraph BACKEND["TBC backend (trusted to execute)"]
+    direction TB
+    S1["Approval service<br/>verify signature, single use,<br/>maker-checker, hash-chained audit"]
+    S2["Device registry"]
+    S3["Mock core"]
+    S1 --> S2
+    S1 --> S3
+  end
+  I1 -- "POST /orders" --> S1
+  I2 == "request QR frames (no network)" ==> A1
+  A3 == "answer QR frames (no network)" ==> I3
+  I3 -- "POST /answers" --> S1

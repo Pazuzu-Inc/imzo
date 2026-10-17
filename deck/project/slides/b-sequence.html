@@ -1,0 +1,18 @@
+<section id="b-sequence" data-transition="fade" style="background:#F6F5F1;color:#14202E;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#0E6A73">Backup</p>
+<h2 style="font-size:56px;font-weight:600;line-height:1.1;color:#0F1B2D">One approval, step by step</h2>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:24px;color:#14202E">
+<tr style="background:#0F1B2D"><th style="width:7%;color:#F6F5F1;text-align:left">#</th><th style="width:25%;color:#F6F5F1;text-align:left">From → to</th><th style="width:68%;color:#F6F5F1;text-align:left">What happens</th></tr>
+<tr style="background:#FCFBF8"><td>1</td><td>Initiator → Server</td><td>POST /orders with the items and the approvers</td></tr>
+<tr style="background:#EEF1EC"><td>2</td><td>Server → Initiator</td><td>Order id and one request per approver device</td></tr>
+<tr style="background:#FCFBF8"><td>3</td><td>Initiator → Imzo</td><td>Request QR frames, no network</td></tr>
+<tr style="background:#EEF1EC"><td>4</td><td>Imzo</td><td>Strict parse, recompute total, fingerprint</td></tr>
+<tr style="background:#FCFBF8"><td>5</td><td>Imzo → Approver</td><td>Shows amount, items and fingerprint</td></tr>
+<tr style="background:#EEF1EC"><td>6</td><td>Approver → Imzo</td><td>Confirms with biometric, or rejects</td></tr>
+<tr style="background:#FCFBF8"><td>7</td><td>Imzo → Initiator</td><td>Signed answer QR frames</td></tr>
+<tr style="background:#EEF1EC"><td>8</td><td>Initiator → Server</td><td>POST /answers</td></tr>
+<tr style="background:#FCFBF8"><td>9</td><td>Server</td><td>Verifies hash, signature, counter, expiry, maker-checker</td></tr>
+<tr style="background:#EEF1EC"><td>10</td><td>Server → Core</td><td>Executes only the stored order</td></tr>
+</table>
+<aside>Backup: the same flow as the sequence diagram in the plan document. Steps 3 and 7 are the only links to the phone, and they carry no network traffic.</aside>
+</section>

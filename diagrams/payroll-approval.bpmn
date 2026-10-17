@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_imzo" targetNamespace="http://imzo.example/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_1" name="Payroll approval with Imzo" processRef="Process_1" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_fin" name="Finance manager">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>prepare</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>submit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>show</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>scan_answer</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_app" name="Approver with Imzo">
+        <bpmn:flowNodeRef>review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_match</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>confirm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>answer</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_srv" name="Approval service">
+        <bpmn:flowNodeRef>store</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>verify</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_valid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_not</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_all</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>exec</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_core" name="Core banking">
+        <bpmn:flowNodeRef>post</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_paid</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Payroll due">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="prepare" name="Prepare payroll list">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="submit" name="Submit order">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="show" name="Show request QR">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:incoming>f17</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="scan_answer" name="Scan answer QR">
+      <bpmn:incoming>f11</bpmn:incoming>
+      <bpmn:outgoing>f12</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="review" name="Scan QR and review on Imzo">
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_match" name="Matches invoice?">
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="confirm" name="Confirm with biometric">
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="reject" name="Reject on Imzo">
+      <bpmn:incoming>f8</bpmn:incoming>
+      <bpmn:outgoing>f10</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="answer" name="Show signed answer QR">
+      <bpmn:incoming>f9</bpmn:incoming>
+      <bpmn:incoming>f10</bpmn:incoming>
+      <bpmn:outgoing>f11</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="store" name="Store order and build request">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="verify" name="Verify signature and rules">
+      <bpmn:incoming>f12</bpmn:incoming>
+      <bpmn:outgoing>f13</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_valid" name="Approved and valid?">
+      <bpmn:incoming>f13</bpmn:incoming>
+      <bpmn:outgoing>f14</bpmn:outgoing>
+      <bpmn:outgoing>f15</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="end_not" name="Order not executed">
+      <bpmn:incoming>f15</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="g_all" name="All required approvals?">
+      <bpmn:incoming>f14</bpmn:incoming>
+      <bpmn:outgoing>f16</bpmn:outgoing>
+      <bpmn:outgoing>f17</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="exec" name="Execute stored order">
+      <bpmn:incoming>f16</bpmn:incoming>
+      <bpmn:outgoing>f18</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="post" name="Post payments">
+      <bpmn:incoming>f18</bpmn:incoming>
+      <bpmn:outgoing>f19</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="end_paid" name="Payroll paid">
+      <bpmn:incoming>f19</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="prepare" />
+    <bpmn:sequenceFlow id="f2" sourceRef="prepare" targetRef="submit" />
+    <bpmn:sequenceFlow id="f3" sourceRef="submit" targetRef="store" />
+    <bpmn:sequenceFlow id="f4" sourceRef="store" targetRef="show" />
+    <bpmn:sequenceFlow id="f5" sourceRef="show" targetRef="review" />
+    <bpmn:sequenceFlow id="f6" sourceRef="review" targetRef="g_match" />
+    <bpmn:sequenceFlow id="f7" name="yes" sourceRef="g_match" targetRef="confirm" />
+    <bpmn:sequenceFlow id="f8" name="no" sourceRef="g_match" targetRef="reject" />
+    <bpmn:sequenceFlow id="f9" sourceRef="confirm" targetRef="answer" />
+    <bpmn:sequenceFlow id="f10" sourceRef="reject" targetRef="answer" />
+    <bpmn:sequenceFlow id="f11" sourceRef="answer" targetRef="scan_answer" />
+    <bpmn:sequenceFlow id="f12" sourceRef="scan_answer" targetRef="verify" />
+    <bpmn:sequenceFlow id="f13" sourceRef="verify" targetRef="g_valid" />
+    <bpmn:sequenceFlow id="f14" name="yes" sourceRef="g_valid" targetRef="g_all" />
+    <bpmn:sequenceFlow id="f15" name="no" sourceRef="g_valid" targetRef="end_not" />
+    <bpmn:sequenceFlow id="f16" name="yes" sourceRef="g_all" targetRef="exec" />
+    <bpmn:sequenceFlow id="f17" name="no: next approver" sourceRef="g_all" targetRef="show" />
+    <bpmn:sequenceFlow id="f18" sourceRef="exec" targetRef="post" />
+    <bpmn:sequenceFlow id="f19" sourceRef="post" targetRef="end_paid" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_1_di" bpmnElement="Participant_1" isHorizontal="true"><dc:Bounds x="100" y="60" width="2440" height="630" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_fin_di" bpmnElement="Lane_fin" isHorizontal="true"><dc:Bounds x="130" y="60" width="2410" height="130" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_app_di" bpmnElement="Lane_app" isHorizontal="true"><dc:Bounds x="130" y="190" width="2410" height="220" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_srv_di" bpmnElement="Lane_srv" isHorizontal="true"><dc:Bounds x="130" y="410" width="2410" height="150" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_core_di" bpmnElement="Lane_core" isHorizontal="true"><dc:Bounds x="130" y="560" width="2410" height="130" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="212" y="107" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="prepare_di" bpmnElement="prepare"><dc:Bounds x="290" y="85" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="submit_di" bpmnElement="submit"><dc:Bounds x="430" y="85" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="show_di" bpmnElement="show"><dc:Bounds x="850" y="85" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="scan_answer_di" bpmnElement="scan_answer"><dc:Bounds x="1570" y="85" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="1010" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_match_di" bpmnElement="g_match" isMarkerVisible="true"><dc:Bounds x="1175" y="275" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="confirm_di" bpmnElement="confirm"><dc:Bounds x="1290" y="205" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="reject_di" bpmnElement="reject"><dc:Bounds x="1290" y="315" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="answer_di" bpmnElement="answer"><dc:Bounds x="1430" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="store_di" bpmnElement="store"><dc:Bounds x="570" y="430" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verify_di" bpmnElement="verify"><dc:Bounds x="1710" y="430" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_valid_di" bpmnElement="g_valid" isMarkerVisible="true"><dc:Bounds x="1875" y="445" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_not_di" bpmnElement="end_not"><dc:Bounds x="1882" y="517" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_all_di" bpmnElement="g_all" isMarkerVisible="true"><dc:Bounds x="2015" y="445" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="exec_di" bpmnElement="exec"><dc:Bounds x="2150" y="430" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="post_di" bpmnElement="post"><dc:Bounds x="2290" y="585" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_paid_di" bpmnElement="end_paid"><dc:Bounds x="2462" y="607" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="248" y="125" /><di:waypoint x="290" y="125" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="390" y="125" /><di:waypoint x="430" y="125" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="530" y="125" /><di:waypoint x="620" y="125" /><di:waypoint x="620" y="430" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="670" y="470" /><di:waypoint x="800" y="470" /><di:waypoint x="800" y="125" /><di:waypoint x="850" y="125" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="950" y="125" /><di:waypoint x="1060" y="125" /><di:waypoint x="1060" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="1110" y="300" /><di:waypoint x="1175" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><di:waypoint x="1200" y="275" /><di:waypoint x="1200" y="245" /><di:waypoint x="1290" y="245" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8"><di:waypoint x="1200" y="325" /><di:waypoint x="1200" y="355" /><di:waypoint x="1290" y="355" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9"><di:waypoint x="1390" y="245" /><di:waypoint x="1480" y="245" /><di:waypoint x="1480" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10"><di:waypoint x="1390" y="355" /><di:waypoint x="1480" y="355" /><di:waypoint x="1480" y="340" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f11_di" bpmnElement="f11"><di:waypoint x="1530" y="300" /><di:waypoint x="1545" y="300" /><di:waypoint x="1545" y="125" /><di:waypoint x="1570" y="125" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f12_di" bpmnElement="f12"><di:waypoint x="1620" y="165" /><di:waypoint x="1620" y="470" /><di:waypoint x="1710" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f13_di" bpmnElement="f13"><di:waypoint x="1810" y="470" /><di:waypoint x="1875" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f14_di" bpmnElement="f14"><di:waypoint x="1925" y="470" /><di:waypoint x="2015" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f15_di" bpmnElement="f15"><di:waypoint x="1900" y="495" /><di:waypoint x="1900" y="517" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f16_di" bpmnElement="f16"><di:waypoint x="2065" y="470" /><di:waypoint x="2150" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f17_di" bpmnElement="f17"><di:waypoint x="2040" y="445" /><di:waypoint x="2040" y="178" /><di:waypoint x="900" y="178" /><di:waypoint x="900" y="165" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f18_di" bpmnElement="f18"><di:waypoint x="2250" y="470" /><di:waypoint x="2340" y="470" /><di:waypoint x="2340" y="585" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f19_di" bpmnElement="f19"><di:waypoint x="2390" y="625" /><di:waypoint x="2462" y="625" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

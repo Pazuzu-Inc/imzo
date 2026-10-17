@@ -1,0 +1,21 @@
+%% Imzo: enrolling a device. Both screens must show the same six-digit code.
+sequenceDiagram
+  autonumber
+  actor A as Administrator
+  participant W as Bank app (laptop)
+  participant S as Approval service
+  participant D as Imzo app (phone)
+  A->>W: start enrolment (already logged in)
+  W->>S: POST /devices/enrol/start
+  S-->>W: challenge (session, nonce, org)
+  W->>D: challenge QR frames (kind en)
+  D->>D: create P-256 key in Keystore, user sets PIN
+  D->>D: sign nonce + org (proof of possession)
+  D->>W: answer QR frames (kind er): public key, signature, optional attestation chain
+  W->>S: POST /devices/enrol/finish
+  S->>S: verify proof, derive six-digit code from the public key
+  S-->>W: code + status pending confirm
+  Note over D,W: Both screens show the same code. A swapped key changes the code.
+  A->>A: compare the two codes
+  A->>S: confirm (hackathon) / second administrator activates (pilot)
+  S-->>W: device ACTIVE

@@ -1,0 +1,11 @@
+<section id="rules" data-transition="fade" style="background:#F6F5F1;color:#14202E;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-size:72px;font-weight:600;line-height:1.1;color:#0F1B2D">Four rules make tampering visible or useless</h2>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:30px;color:#14202E">
+<tr style="background:#0F1B2D"><th style="width:52%;color:#F6F5F1;text-align:left">Rule</th><th style="width:48%;color:#F6F5F1;text-align:left">What it stops</th></tr>
+<tr style="background:#FCFBF8"><td>The phone recomputes totals from the signed bytes</td><td>A changed amount or beneficiary shows on the approver’s own screen</td></tr>
+<tr style="background:#EEF1EC"><td>The server executes only the order it stored</td><td>A different order riding on a valid signature</td></tr>
+<tr style="background:#FCFBF8"><td>Each answer is single use, bound to one device, with a rising counter</td><td>Replay and copying</td></tr>
+<tr style="background:#EEF1EC"><td>Maker-checker and a hash-chained audit log</td><td>One insider approving alone, and silent edits to history</td></tr>
+</table>
+<aside>3:15 to 3:45, if time allows. These four rules are the whole security argument. Each one is covered by a test in the reference implementation: tampering, replay, counter regression, maker approving their own order, and edits to the audit chain.</aside>
+</section>

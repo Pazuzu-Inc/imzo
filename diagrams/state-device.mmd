@@ -1,0 +1,10 @@
+%% Imzo: device lifecycle on the server.
+stateDiagram-v2
+  [*] --> PendingConfirm: enrolment answer verified
+  PendingConfirm --> Active: codes match, administrator activates
+  PendingConfirm --> Revoked: codes differ
+  Active --> Locked: five failed verifications in a row
+  Locked --> Active: administrator unlocks
+  Active --> Revoked: lost, stolen or retired
+  Locked --> Revoked: administrator revokes
+  Revoked --> [*]

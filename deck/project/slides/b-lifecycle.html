@@ -1,0 +1,31 @@
+<section id="b-lifecycle" data-transition="fade" style="background:#F6F5F1;color:#14202E;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#0E6A73">Backup</p>
+<h2 style="font-size:56px;font-weight:600;line-height:1.1;color:#0F1B2D">Order lifecycle</h2>
+<div style="display:flex;gap:12px;align-items:stretch">
+<p style="flex:1;font-size:30px;font-weight:600;line-height:1.2;text-align:center;background:#FCFBF8;border:2px solid #D3CFC3;border-radius:16px;padding:28px 12px">Draft</p>
+<div style="display:flex;align-items:center"><x-shape kind="arrow-right" style="width:48px;height:32px;background:#4A5663"></x-shape></div>
+<p style="flex:1;font-size:30px;font-weight:600;line-height:1.2;text-align:center;background:#FCFBF8;border:2px solid #D3CFC3;border-radius:16px;padding:28px 12px">Pending approval</p>
+<div style="display:flex;align-items:center"><x-shape kind="arrow-right" style="width:48px;height:32px;background:#4A5663"></x-shape></div>
+<p style="flex:1;font-size:30px;font-weight:600;line-height:1.2;text-align:center;background:#FCFBF8;border:2px solid #D3CFC3;border-radius:16px;padding:28px 12px">Partly approved</p>
+<div style="display:flex;align-items:center"><x-shape kind="arrow-right" style="width:48px;height:32px;background:#4A5663"></x-shape></div>
+<p style="flex:1;font-size:30px;font-weight:600;line-height:1.2;text-align:center;background:#FCFBF8;border:2px solid #D3CFC3;border-radius:16px;padding:28px 12px">Approved</p>
+<div style="display:flex;align-items:center"><x-shape kind="arrow-right" style="width:48px;height:32px;background:#0E6A73"></x-shape></div>
+<p style="flex:1;font-size:30px;font-weight:600;line-height:1.2;text-align:center;background:#E3F0F1;border:3px solid #0E6A73;border-radius:16px;padding:28px 12px">Executed</p>
+</div>
+<div style="display:flex;gap:24px;align-items:stretch">
+<div style="flex:1;background:#EEF1EC;border:2px solid #D3CFC3;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:8px">
+<p style="font-size:30px;font-weight:600">Cancelled</p>
+<p style="font-size:26px;line-height:1.35">From Draft: the maker cancels.</p>
+</div>
+<div style="flex:1;background:#EEF1EC;border:2px solid #D3CFC3;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:8px">
+<p style="font-size:30px;font-weight:600">Rejected</p>
+<p style="font-size:26px;line-height:1.35">From either pending state: a signed rejection.</p>
+</div>
+<div style="flex:1;background:#EEF1EC;border:2px solid #D3CFC3;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:8px">
+<p style="font-size:30px;font-weight:600">Expired</p>
+<p style="font-size:26px;line-height:1.35">From either pending state: time runs out.</p>
+</div>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#4A5663">Executed, Rejected, Expired and Cancelled are final. One approval is enough to go straight from Pending to Approved. A failed verification does not change the state; it writes an audit event and counts toward the device lock.</p>
+<aside>Backup: the state machine from the plan document. The device has its own small cycle: pending confirm, active, locked, revoked.</aside>
+</section>

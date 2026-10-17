@@ -1,0 +1,67 @@
+%% Imzo: server data model. One order creates one request per approver device.
+classDiagram
+  class Organization {
+    +id
+    +name
+    +status
+  }
+  class User {
+    +id
+    +orgId
+    +name
+    +role  maker | approver | admin
+  }
+  class Device {
+    +id  16 bytes
+    +userId
+    +publicKey
+    +status  pendingConfirm | active | locked | revoked
+    +lastCounter
+    +failedAttempts
+    +attestation  optional
+  }
+  class Order {
+    +orderId
+    +orgId
+    +makerUserId
+    +op
+    +currency
+    +ref
+    +total
+    +status  pending | executed | rejected | expired
+  }
+  class OrderItem {
+    +position
+    +name
+    +account
+    +amountTiyin
+  }
+  class ApprovalRequest {
+    +rid  16 bytes
+    +deviceId
+    +canonicalBytes
+    +expiresAt
+    +status  pending | approved | rejected | expired
+  }
+  class Approval {
+    +decision  approve | reject
+    +counter
+    +signature
+    +createdAt
+  }
+  class AuditEvent {
+    +id
+    +time
+    +kind
+    +actor
+    +prevHash
+    +hash
+  }
+  Organization "1" --> "*" User
+  User "1" --> "*" Device
+  Organization "1" --> "*" Order
+  Order "1" *-- "1..50" OrderItem
+  Order "1" *-- "1..5" ApprovalRequest
+  ApprovalRequest "1" --> "0..1" Approval
+  Device "1" --> "*" Approval : signs
+  Order ..> AuditEvent : every change writes one
