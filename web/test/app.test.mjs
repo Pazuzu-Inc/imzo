@@ -181,3 +181,33 @@ test("Send is re-enabled and the error shown when applyTamper throws (non-digit 
   assert.equal(calls.filter((c) => c.path === "/api/orders" && c.method === "POST").length, ordersBefore, "no order was sent");
   void fresh;
 });
+
+test("the tamper box is declared autocomplete=off and its label is highlighted only while ticked", async () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  for (const id of ["tamper", "enrolUser", "maker", "approver", "ref", "fps", "ecc", "devFrames"]) {
+    assert.match(html, new RegExp(`<(input|select|textarea)[^>]*id="${id}"[^>]*autocomplete="off"`), `${id} autocomplete=off`);
+  }
+  assert.match(html, /id="tamperLabel"/);
+  element("tamper").checked = true;
+  handlers.tamper.change();
+  assert.match(element("tamperLabel").className, /armed/);
+  element("tamper").checked = false;
+  handlers.tamper.change();
+  assert.doesNotMatch(element("tamperLabel").className, /armed/);
+});
+
+test("Reset server unticks the tamper box", async () => {
+  element("tamper").checked = true;
+  handlers.tamper.change();
+  await click("reset");
+  assert.equal(element("tamper").checked, false);
+  assert.doesNotMatch(element("tamperLabel").className, /armed/);
+});
+
+test("a fresh page instance starts with the tamper box unticked even if the DOM was restored as ticked", async () => {
+  element("tamper").checked = true; // browser form-state restoration
+  await import("../app.js?fresh-page");
+  await sleep(50);
+  assert.equal(element("tamper").checked, false);
+  assert.doesNotMatch(element("tamperLabel").className, /armed/);
+});

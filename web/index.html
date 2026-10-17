@@ -23,6 +23,7 @@
   input[type=text], input[type=number], select, textarea { font: inherit; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 6px; background: #fff; color: var(--ink); }
   input[type=text] { width: 12em; }
   input[type=number] { width: 4.5em; }
+  label.armed { font-weight: 800; color: var(--bad); }
   button { font: inherit; font-weight: 700; padding: 8px 16px; border: 2px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; cursor: pointer; }
   button.secondary { background: #fff; color: var(--ink); }
   button.danger { background: var(--bad); border-color: var(--bad); }
@@ -89,9 +90,9 @@
     <div class="qrwrap"><canvas id="qr" width="560" height="560"></canvas></div>
     <p id="playinfo"></p>
     <div class="row">
-      <label>fps <input id="fps" type="number" min="1" max="15" step="1" value="3"></label>
+      <label>fps <input id="fps" autocomplete="off" type="number" min="1" max="15" step="1" value="3"></label>
       <label>error correction
-        <select id="ecc"><option>L</option><option selected>M</option><option>Q</option><option>H</option></select>
+        <select id="ecc" autocomplete="off"><option>L</option><option selected>M</option><option>Q</option><option>H</option></select>
       </label>
     </div>
     <div class="cam">
@@ -104,7 +105,7 @@
     <section id="enrol">
       <h2>1. Enrolment</h2>
       <div class="row">
-        <label>user <input id="enrolUser" type="text" value="alice"></label>
+        <label>user <input id="enrolUser" autocomplete="off" type="text" value="alice"></label>
         <button id="enrolBegin">Begin enrolment</button>
       </div>
       <p class="note">Play the enrolment QR to the phone, then show the phone's reply to the webcam. Both screens must show the same code.</p>
@@ -114,9 +115,9 @@
     <section id="order">
       <h2>2. Payroll order</h2>
       <div class="row">
-        <label>maker <input id="maker" type="text" value="mike"></label>
-        <label>approver <input id="approver" type="text" value="alice"></label>
-        <label>reference <input id="ref" type="text" value="Payroll October"></label>
+        <label>maker <input id="maker" autocomplete="off" type="text" value="mike"></label>
+        <label>approver <input id="approver" autocomplete="off" type="text" value="alice"></label>
+        <label>reference <input id="ref" autocomplete="off" type="text" value="Payroll October"></label>
       </div>
       <div class="table-scroll"><table>
         <thead><tr><th>#</th><th>Name</th><th>Account</th><th class="num">Amount (UZS)</th></tr></thead>
@@ -124,7 +125,7 @@
         <tfoot><tr><td colspan="3">Total</td><td class="num" id="total"></td></tr></tfoot>
       </table></div>
       <div class="row">
-        <label><input id="tamper" type="checkbox"> Demo: infected laptop</label>
+        <label id="tamperLabel"><input id="tamper" autocomplete="off" type="checkbox"> Demo: infected laptop</label>
         <button id="send">Send to approver</button>
       </div>
       <div id="fpWrap" hidden>
@@ -142,7 +143,7 @@
     <section id="dev" class="dev">
       <h2>Dev only: paste frames</h2>
       <p class="note">Bypasses the camera. One frame per line. Not part of the demo.</p>
-      <textarea id="devFrames" spellcheck="false" placeholder="IMQ1.rs.xxxxxxxx.1.2.…"></textarea>
+      <textarea id="devFrames" autocomplete="off" spellcheck="false" placeholder="IMQ1.rs.xxxxxxxx.1.2.…"></textarea>
       <div class="row">
         <button id="devAnswers" class="secondary">Submit to /api/answers</button>
         <button id="devEnrol" class="secondary">Submit to /api/enrol/finish</button>

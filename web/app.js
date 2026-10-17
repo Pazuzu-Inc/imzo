@@ -147,8 +147,7 @@ function showOrderStatus(status) {
   setStatus(status, statusKind(status), status === "PENDING" ? "Waiting for more approvals." : "");
   if (status === "PENDING") {
     // the answer is spent: start collecting afresh so the next frame cannot complete and re-send the old one.
-    // A still-visible answer QR may be re-collected and re-POSTed; the server then answers NOT PENDING
-    // (irrelevant for single-approver orders, which never reach PENDING after an answer).
+    // (The `sent` set stops a still-visible answer QR from being POSTed twice in this order session.)
     collector.reset();
     scanner.resetDedupe();
     setProgress(0, 0);
@@ -256,9 +255,20 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 
+/** The operator-only tamper switch: always starts and resets unticked, and its label stands out while ticked. */
+function setTamper(on) {
+  $("tamper").checked = on;
+  syncTamperLabel();
+}
+
+function syncTamperLabel() {
+  $("tamperLabel").className = $("tamper").checked ? "armed" : "";
+}
+
 async function resetServer() {
   stopStage();
   session = null;
+  setTamper(false);
   collector.reset();
   $("code").textContent = "";
   showFingerprint("");
@@ -300,6 +310,8 @@ function renderPayroll() {
 }
 
 async function init() {
+  setTamper(false); // never trust restored form state: a ticked box would silently alter the order
+  $("tamper").addEventListener("change", syncTamperLabel);
   $("enrolBegin").addEventListener("click", beginEnrol);
   $("send").addEventListener("click", sendOrder);
   $("auditFetch").addEventListener("click", refreshAudit);
