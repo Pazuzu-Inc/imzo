@@ -1,9 +1,9 @@
 %% Imzo: components and trust zones. Render at https://mermaid.live or with mermaid-cli.
 flowchart LR
-  subgraph APPROVER["Approver phone (trusted to sign)"]
+  subgraph APPROVER["Imzo Approver (trusted to sign)<br/>Approver app on a phone, or Imzo Device (offline hardware)"]
     direction TB
     A1["Scan + strict parse"] --> A2["Review<br/>recomputes totals"] --> A3["Sign + show answer<br/>biometric or PIN"]
-    AX[("Android Keystore<br/>P-256 key, never exported")]
+    AX[("Keystore or secure element<br/>P-256 key, never exported")]
     A3 --- AX
   end
   subgraph INITIATOR["Initiator (not trusted)"]

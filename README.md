@@ -3,6 +3,15 @@
 Concept: a separate approver that shows exactly what a business payment order contains and signs only that.
 This folder is outside any project repository on purpose.
 
+## Two editions of the approver
+
+Imzo is one protocol with two ways to run the approver, so a client can choose by risk and budget:
+
+- **Imzo Device:** a dedicated, fully offline pocket device with a small screen (shows the order, then the answer QR), a camera and a secure element. No radios. This is the highest-assurance option. It is a target design, not built.
+- **Imzo Approver app:** an Android app with no `INTERNET` permission at all, camera only, key in the Keystore. It is cheap and quick to roll out. The demo and the pilot use this edition.
+
+Both editions talk to the world only through QR frames. Details and limits: [`docs/editions.md`](docs/editions.md).
+
 ## What is here
 
 | Path | What it is |
@@ -14,6 +23,7 @@ This folder is outside any project repository on purpose.
 | `diagrams/*.mmd` | Mermaid sources: architecture, approval sequence, enrolment sequence, order and device state machines, class model. Render at https://mermaid.live |
 | `diagrams/payroll-approval.bpmn` | BPMN 2.0 swimlane (four lanes) with a real loop for the second approver. Open in https://demo.bpmn.io or Camunda Modeler |
 | `diagrams/make_bpmn.py` | Generator for the `.bpmn` file; edit its tables and re-run |
+| `docs/editions.md` | The two editions (device and app): what "no internet" means, limits, target spec |
 | `deck/` | Slide sources (see the notes below) |
 | `.venv/` | Python virtual environment holding the `cryptography` package; safe to delete and recreate |
 
