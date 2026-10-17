@@ -338,17 +338,27 @@ class EnrolmentTests(unittest.TestCase):
         self.assertNotIn(nonce2, server._pending_enrol)  # the nonce is consumed
         self.assertEqual(code_of(server.finish_enrolment, answer), "BAD SIGNATURE")
 
-    def test_a_revoked_or_locked_device_does_not_block_a_new_enrolment(self):
+    def test_a_revoked_device_does_not_block_a_new_enrolment(self):
         server = imzo.Server()
-        for status in ("REVOKED", "LOCKED"):
-            old = imzo.Device()
-            nonce, _ = server.begin_enrolment("alice", "demo")
-            server.finish_enrolment(imzo.dumps(old.enrolment_answer(nonce, "demo")))
-            server.devices[old.id]["status"] = status
-            new = imzo.Device()
-            nonce, _ = server.begin_enrolment("alice", "demo")
-            self.assertEqual(server.finish_enrolment(imzo.dumps(new.enrolment_answer(nonce, "demo"))), new.id)
-            server.devices[new.id]["status"] = "REVOKED"
+        old = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        server.finish_enrolment(imzo.dumps(old.enrolment_answer(nonce, "demo")))
+        server.revoke_device(old.id)
+        new = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        self.assertEqual(server.finish_enrolment(imzo.dumps(new.enrolment_answer(nonce, "demo"))), new.id)
+
+    def test_a_locked_device_still_blocks_a_new_enrolment(self):
+        server = imzo.Server()
+        old = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        server.finish_enrolment(imzo.dumps(old.enrolment_answer(nonce, "demo")))
+        server.devices[old.id]["status"] = "LOCKED"
+        new = imzo.Device()
+        nonce, _ = server.begin_enrolment("alice", "demo")
+        answer = imzo.dumps(new.enrolment_answer(nonce, "demo"))
+        self.assertEqual(code_of(server.finish_enrolment, answer), "USER ALREADY HAS A DEVICE")
+        self.assertNotIn(new.id, server.devices)
 
     def test_another_user_can_still_enrol(self):
         server = imzo.Server()

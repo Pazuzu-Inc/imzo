@@ -282,6 +282,21 @@ class OneDevicePerUserTests(BackendCase):
         (status, out), _ = self.answer(first, created["frames"])
         self.assertEqual((status, out), (200, {"status": "EXECUTED"}))
 
+    def test_a_locked_device_still_blocks_a_new_enrolment(self):
+        first, _, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+        backend.STATE.server.devices[first.id]["status"] = "LOCKED"
+        _, _, status, out = self.enrol("alice")
+        self.assertEqual((status, out), (400, {"error": "USER ALREADY HAS A DEVICE"}))
+        self.assertEqual(len(backend.STATE.server.devices), 1)
+
+    def test_a_revoked_device_frees_the_slot(self):
+        first, _, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+        backend.STATE.server.revoke_device(first.id)
+        _, _, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+
     def test_reset_allows_re_enrolment(self):
         self.enrol("alice")
         self.call("POST", "/api/reset", {})

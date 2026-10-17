@@ -481,9 +481,10 @@ class Server:
                 continue
             del self._pending_enrol[nonce]  # consumed even if the enrolment is refused below
             if device_id(pub) not in self.devices and any(
-                d["user"] == pending["user"] and d["status"] == "ACTIVE" for d in self.devices.values()
+                d["user"] == pending["user"] and d["status"] in ("ACTIVE", "LOCKED") for d in self.devices.values()
             ):
-                # one ACTIVE device per user, so a later enrolment cannot take over a user's orders
+                # one live (ACTIVE or LOCKED) device per user, so neither a later enrolment nor locking the device
+                # by forged answers lets someone take over a user's orders; only REVOKED (or a reset) frees the slot
                 raise ProtocolError("USER ALREADY HAS A DEVICE")
             return self.register_device(pub, pending["user"])
         raise ProtocolError("BAD SIGNATURE")
