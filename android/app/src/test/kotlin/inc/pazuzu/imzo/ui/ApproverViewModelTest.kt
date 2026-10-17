@@ -1,7 +1,9 @@
 package inc.pazuzu.imzo.ui
 
 import inc.pazuzu.imzo.DeviceKeyLost
+import inc.pazuzu.imzo.PromptText
 import inc.pazuzu.imzo.SigningCancelled
+import inc.pazuzu.imzo.SigningLockedOut
 import inc.pazuzu.imzo.SigningFailed
 import inc.pazuzu.imzo.protocol.Approver
 import inc.pazuzu.imzo.protocol.Cbor
@@ -29,6 +31,7 @@ class ApproverViewModelTest {
     private lateinit var signer: TestSigner
     private lateinit var counter: TestCounter
     private lateinit var vm: ApproverViewModel
+    private val prompts = mutableListOf<PromptText>()
 
     @Before
     fun setUp() {
@@ -44,7 +47,8 @@ class ApproverViewModelTest {
     private fun newViewModel() {
         signer = TestSigner()
         counter = TestCounter()
-        vm = ApproverViewModel(Approver(signer, counter)) { signer.publicKey }
+        prompts.clear()
+        vm = ApproverViewModel(Approver(signer, counter), setPrompt = { prompts += it }) { signer.publicKey }
     }
 
     private val state get() = vm.state.value
@@ -360,5 +364,78 @@ class ApproverViewModelTest {
         vm.startScan()
         frames("en", enrolRequest()).forEach(vm::onEnrolRequestFrame)
         assertEquals(UiState.Scanning(null), state)
+    }
+
+    // ---------------------------------------------------------------- prompt text, lockout, stray cancellation
+
+    @Test
+    fun promptTextDescribesWhatIsBeingSigned() {
+        reviewMyRequest()
+        vm.approve()
+        assertEquals(PromptText("Approve this order", "3 items, total 14,735,067.89 UZS"), prompts.last())
+
+        vm.reset()
+        reviewMyRequest()
+        vm.reject()
+        assertEquals(PromptText("Reject this order", "3 items, total 14,735,067.89 UZS"), prompts.last())
+
+        vm.reset()
+        vm.startEnrol()
+        frames("en", enrolRequest()).forEach(vm::onEnrolRequestFrame)
+        assertEquals(PromptText("Enrol this device", "Code ${enrolmentCode(signer.key)}"), prompts.last())
+        assertEquals(3, prompts.size)
+    }
+
+    @Test
+    fun promptTextIsSetBeforeTheSignerRuns() {
+        reviewMyRequest()
+        var seenAtSign: PromptText? = null
+        signer.beforeSign = { seenAtSign = prompts.lastOrNull() }
+        vm.approve()
+        assertEquals("Approve this order", seenAtSign?.title)
+    }
+
+    @Test
+    fun lockoutShowsAVisibleNotice() {
+        val reviewing = reviewMyRequest()
+        signer.beforeSign = { throw SigningLockedOut("locked") }
+        vm.approve()
+        val back = state as UiState.Reviewing
+        assertSame(reviewing.review, back.review)
+        assertEquals(LOCKOUT_NOTICE, back.notice)
+        assertEquals(false, back.busy)
+        assertEquals("Too many attempts. Try again later or use the screen lock.", LOCKOUT_NOTICE)
+    }
+
+    @Test
+    fun lockoutDuringEnrolmentShowsTheNoticeToo() {
+        vm.startEnrol()
+        signer.beforeSign = { throw SigningLockedOut("locked") }
+        frames("en", enrolRequest()).forEach(vm::onEnrolRequestFrame)
+        assertEquals(UiState.EnrolScanning(null, LOCKOUT_NOTICE), state)
+    }
+
+    @Test
+    fun strayCancellationDoesNotLeaveTheFlagsStuck() {
+        val reviewing = reviewMyRequest()
+        signer.beforeSign = { throw kotlinx.coroutines.CancellationException("stray") }
+        vm.approve()
+        val back = state as UiState.Reviewing
+        assertSame(reviewing.review, back.review)
+        assertEquals(false, back.busy)
+        signer.beforeSign = {}
+        vm.approve() // not blocked by a stuck in-flight flag
+        assertTrue(state is UiState.Answer)
+    }
+
+    @Test
+    fun strayCancellationDuringEnrolmentGoesBackToScanning() {
+        vm.startEnrol()
+        signer.beforeSign = { throw kotlinx.coroutines.CancellationException("stray") }
+        frames("en", enrolRequest()).forEach(vm::onEnrolRequestFrame)
+        assertEquals(UiState.EnrolScanning(null), state)
+        signer.beforeSign = {}
+        frames("en", enrolRequest()).forEach(vm::onEnrolRequestFrame)
+        assertTrue(state is UiState.EnrolShowing)
     }
 }

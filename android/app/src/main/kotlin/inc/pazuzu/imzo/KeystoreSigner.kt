@@ -45,6 +45,13 @@ class KeystoreSigner(
         PrefsKeyMarkerStore(context.applicationContext.getSharedPreferences(MARKER_FILE, Context.MODE_PRIVATE)),
     )
 
+    /**
+     * Text of the next system prompt. Set it right before each [sign]; the view model allows only one
+     * signature in flight, so there is no race. Defaults to a generic title.
+     */
+    @Volatile
+    var promptText: PromptText = PromptText("Confirm with your fingerprint or screen lock", "")
+
     /** Creates the key on the very first call only; throws [DeviceKeyLost] if it has gone missing since. */
     override val publicKey: ByteArray by lazy { registry.publicKey() }
 
@@ -87,9 +94,10 @@ class KeystoreSigner(
                             BiometricPrompt.ERROR_USER_CANCELED,
                             BiometricPrompt.ERROR_CANCELED,
                             BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+                            -> SigningCancelled(text)
                             BiometricPrompt.ERROR_LOCKOUT,
                             BiometricPrompt.ERROR_LOCKOUT_PERMANENT,
-                            -> SigningCancelled(text)
+                            -> SigningLockedOut(text)
                             else -> SigningFailed(text)
                         },
                     )
@@ -97,8 +105,10 @@ class KeystoreSigner(
                 // onAuthenticationFailed (a bad fingerprint) is not terminal: the prompt stays up.
             }
             val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
+            val text = promptText
             val info = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Approve this order")
+                .setTitle(text.title)
+                .apply { if (text.subtitle.isNotEmpty()) setSubtitle(text.subtitle) }
                 .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
                 // no negative button: the API forbids one when DEVICE_CREDENTIAL is allowed
                 .build()

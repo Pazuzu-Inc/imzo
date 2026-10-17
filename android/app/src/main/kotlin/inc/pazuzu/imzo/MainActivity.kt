@@ -21,7 +21,7 @@ class MainActivity : FragmentActivity() {
                 current?.get() ?: throw SigningFailed("Imzo is not in the foreground")
             }
             val approver = Approver(signer, PrefsCounterStore(applicationContext))
-            return ApproverViewModel(approver) { signer.publicKey } as T
+            return ApproverViewModel(approver, setPrompt = { signer.promptText = it }) { signer.publicKey } as T
         }
     }
 

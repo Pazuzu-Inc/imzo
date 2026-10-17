@@ -1,5 +1,6 @@
 package inc.pazuzu.imzo.ui
 
+import inc.pazuzu.imzo.PromptText
 import inc.pazuzu.imzo.protocol.Item
 import inc.pazuzu.imzo.protocol.Review
 
@@ -54,3 +55,11 @@ object ReviewPresenter {
     private fun line(number: Int, item: Item) =
         ItemLine(number.toString(), item.name, item.account, formatUzs(item.amount))
 }
+
+/** System prompt text for approving or rejecting: what is being signed, from the review itself. */
+fun approvePrompt(review: Review, approve: Boolean): PromptText {
+    val items = if (review.count == 1) "1 item" else "${review.count} items"
+    return PromptText(if (approve) "Approve this order" else "Reject this order", "$items, total ${formatUzs(review.total)}")
+}
+
+fun enrolPrompt(code: String) = PromptText("Enrol this device", "Code $code")

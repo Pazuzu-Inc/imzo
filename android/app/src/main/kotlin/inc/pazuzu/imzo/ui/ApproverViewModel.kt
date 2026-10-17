@@ -3,7 +3,9 @@ package inc.pazuzu.imzo.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import inc.pazuzu.imzo.DeviceKeyLost as KeyLost
+import inc.pazuzu.imzo.PromptText
 import inc.pazuzu.imzo.SigningCancelled
+import inc.pazuzu.imzo.SigningLockedOut
 import inc.pazuzu.imzo.SigningFailed
 import inc.pazuzu.imzo.protocol.Approver
 import inc.pazuzu.imzo.protocol.FrameAssembler
@@ -19,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+internal const val LOCKOUT_NOTICE = "Too many attempts. Try again later or use the screen lock."
 
 sealed interface UiState {
     /** `deviceId` is the grouped device id for display. */
@@ -52,11 +56,13 @@ sealed interface UiState {
  * One answer per review: while [approve] / [reject] is in flight, or after it succeeded, further calls
  * do nothing until [reset]. The counter used by a cancelled or failed attempt is not refunded.
  *
+ * [setPrompt] receives the system prompt text right before each signature (the app hands it to the signer).
  * [publicKey] is read lazily for display and enrolment; failures surface as [UiState.DeviceKeyLost] or
  * [UiState.ScreenLockRequired].
  */
 class ApproverViewModel(
     private val approver: Approver,
+    private val setPrompt: (PromptText) -> Unit = {},
     private val publicKey: () -> ByteArray,
 ) : ViewModel() {
     private val assembler = FrameAssembler()
@@ -186,23 +192,29 @@ class ApproverViewModel(
         inFlight = true
         val my = epoch
         job = viewModelScope.launch {
-            val next: UiState = try {
+            var next: UiState? = null
+            try {
+                setPrompt(enrolPrompt(code))
                 val answer = approver.enrolmentAnswer(request.nonce, request.org)
-                UiState.EnrolShowing(code, Frames.encode("er", answer))
+                next = UiState.EnrolShowing(code, Frames.encode("er", answer))
             } catch (e: CancellationException) {
                 throw e
             } catch (_: SigningCancelled) {
-                UiState.EnrolScanning(null)
+                next = UiState.EnrolScanning(null)
+            } catch (_: SigningLockedOut) {
+                next = UiState.EnrolScanning(null, LOCKOUT_NOTICE)
             } catch (e: SigningFailed) {
-                UiState.EnrolScanning(null, e.message)
+                next = UiState.EnrolScanning(null, e.message)
             } catch (e: ProtocolError) {
-                UiState.Rejected(e.code, e.detail)
+                next = UiState.Rejected(e.code, e.detail)
             } catch (e: Exception) {
-                keyProblem(e)
-            }
-            if (epoch == my) {
-                inFlight = false
-                _state.value = next
+                next = keyProblem(e)
+            } finally {
+                // also runs on a stray cancellation: never leave the flag stuck
+                if (epoch == my) {
+                    inFlight = false
+                    _state.value = next ?: UiState.EnrolScanning(null)
+                }
             }
         }
     }
@@ -220,25 +232,31 @@ class ApproverViewModel(
         val my = epoch
         _state.value = reviewing.copy(notice = null, busy = true)
         job = viewModelScope.launch {
-            val next: UiState = try {
+            var next: UiState? = null
+            try {
+                setPrompt(approvePrompt(reviewing.review, approve))
                 val response = approver.respond(reviewing.review, approve)
-                UiState.Answer(Frames.encode("rs", response), approve)
+                next = UiState.Answer(Frames.encode("rs", response), approve)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: SigningCancelled) {
-                reviewing.copy(notice = null, busy = false)
+                next = reviewing.copy(notice = null, busy = false)
+            } catch (_: SigningLockedOut) {
+                next = reviewing.copy(notice = LOCKOUT_NOTICE, busy = false)
             } catch (e: SigningFailed) {
-                reviewing.copy(notice = e.message ?: "Signing failed", busy = false)
+                next = reviewing.copy(notice = e.message ?: "Signing failed", busy = false)
             } catch (e: KeyLost) {
-                UiState.DeviceKeyLost
+                next = UiState.DeviceKeyLost
             } catch (e: ProtocolError) {
-                UiState.Rejected(e.code, e.detail)
+                next = UiState.Rejected(e.code, e.detail)
             } catch (e: Exception) {
-                reviewing.copy(notice = "Could not sign: ${e.message}", busy = false)
-            }
-            if (epoch == my) {
-                inFlight = false
-                _state.value = next
+                next = reviewing.copy(notice = "Could not sign: ${e.message}", busy = false)
+            } finally {
+                // also runs on a stray cancellation: never leave the flags stuck
+                if (epoch == my) {
+                    inFlight = false
+                    _state.value = next ?: reviewing.copy(notice = null, busy = false)
+                }
             }
         }
     }

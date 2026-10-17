@@ -1,6 +1,7 @@
 package inc.pazuzu.imzo.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,7 +31,17 @@ fun EnrolScreen(state: UiState.EnrolShowing, onDone: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Check it matches the laptop", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-        Text(state.code, fontFamily = FontFamily.Monospace, fontSize = 72.sp, fontWeight = FontWeight.Black, softWrap = false)
+        // Sized from the available width and the font scale so all six digits always fit.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val fontScale = LocalDensity.current.fontScale
+            Text(
+                state.code,
+                fontFamily = FontFamily.Monospace,
+                fontSize = enrolCodeFontSizeSp(maxWidth.value, fontScale).sp,
+                fontWeight = FontWeight.Black,
+                softWrap = false,
+            )
+        }
         Text("Then show this to the laptop camera", fontSize = 18.sp)
         QrPlayer(state.frames, Modifier.fillMaxWidth(), fps = 3)
         Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Done", fontSize = 22.sp) }
