@@ -123,7 +123,9 @@ async function finishFrames(frames) {
 function showOrderStatus(status) {
   setStatus(status, statusKind(status), status === "PENDING" ? "Waiting for more approvals." : "");
   if (status === "PENDING") {
-    // the answer is spent: start collecting afresh so the next frame cannot complete and re-send the old one
+    // the answer is spent: start collecting afresh so the next frame cannot complete and re-send the old one.
+    // A still-visible answer QR may be re-collected and re-POSTed; the server then answers NOT PENDING
+    // (irrelevant for single-approver orders, which never reach PENDING after an answer).
     collector.reset();
     scanner.resetDedupe();
     setProgress(0, 0);
@@ -163,9 +165,10 @@ async function sendOrder() {
   const sendButton = $("send");
   sendButton.disabled = true; // no second order while this request is in flight
   try {
-    const items = tamper ? applyTamper(payroll) : tamperOff(payroll); // the table always shows `payroll`
     let created;
     try {
+      // inside the try so that a throwing applyTamper also re-enables the button
+      const items = tamper ? applyTamper(payroll) : tamperOff(payroll); // the table always shows `payroll`
       created = await api("/api/orders", {
         maker: $("maker").value.trim(),
         approver: $("approver").value.trim(),

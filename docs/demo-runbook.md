@@ -75,7 +75,7 @@ None of these has been run on a real device; the on-device tests (`connectedDebu
 - Review screen: 50 items scroll fully, header + buttons visible in portrait, landscape and at max font size; wrong-device order shows WRONG DEVICE without buttons; rotation during the prompt.
 - Enrolment: code matches laptop; cancel during enrolment; no-screen-lock message; key-lost message.
 - Release build: FLAG_SECURE blocks screenshots; no probe button.
-- Enrol an extra fingerprint then sign (observe key invalidation); remove and reset screen lock then sign (expect "device key missing; enrol again").
+- Enrol an extra fingerprint then sign (observe key invalidation); remove and reset screen lock then sign (expect "device key missing; enrol this device again").
 
 Results to record here once known: scan time 12-person payroll ___ s; 50-item payroll ___ s; chunk size ___ bytes; fps ___; ECC ___; security level ___ (StrongBox or TEE).
 
@@ -87,7 +87,7 @@ Results to record here once known: scan time 12-person payroll ___ s; 50-item pa
 | **The laptop does not read the answer QR** | Phone brightness at maximum, hold the phone close and flat to the webcam, screen free of glare, "answer frames" counter on the page shows how many parts arrived. Try the other webcam. Last resort (rehearsal only): the dev-only paste box on the page. |
 | **Page shows an error such as BAD SIGNATURE, NOT PENDING, UNKNOWN ORDER, NO DEVICE** | NO DEVICE: nobody is enrolled under that approver name; enrol again. NOT PENDING: this answer was already used; send a new order. BAD SIGNATURE on enrolment: the QR belongs to an older challenge (challenges expire after 5 minutes and only the 32 newest are kept); press Begin enrolment again. |
 | **Biometric lockout** (too many wrong fingers) | The app shows a lockout notice. Wait for the lockout to end, or use the screen-lock PIN in the prompt. Fall back to the spare phone or the clip. |
-| **Key lost** (phone shows DEVICE KEY LOST, or "device key missing; enrol again") | The key was removed or invalidated (screen lock removed, extra fingerprint enrolled). Android Settings, Apps, Imzo, Storage, **Clear data**. Reopen the app, press **Reset server** on the page (or `curl -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/reset`), then run the enrolment script again. |
+| **Key lost** (phone shows DEVICE KEY LOST, or "device key missing; enrol this device again") | The key was removed or invalidated (screen lock removed, extra fingerprint enrolled). Android Settings, Apps, Imzo, Storage, **Clear data**. Reopen the app, press **Reset server** on the page (or `curl -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/reset`), then run the enrolment script again. |
 | **Backend restarted or crashed** | All state is in memory: devices, orders and audit log are gone and the phone is no longer registered. Restart `.venv/bin/python backend/app.py`, reload the page, run the enrolment script again. The phone keeps its own key and counter; no data clearing is needed. |
 | **Page returns 403 FORBIDDEN** | The address in the browser is not `127.0.0.1:8080` or `localhost:8080`. Open <http://127.0.0.1:8080/>. |
 | **Camera blocked on the page** | Chrome camera icon in the address bar, allow and reload. Check no other app holds the webcam. |

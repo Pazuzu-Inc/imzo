@@ -4,13 +4,17 @@ import assert from "node:assert/strict";
 // A tiny stand-in for the browser, just enough to run app.js unmodified.
 
 const handlers = {};
+const resetHandlers = [];
 const elements = new Map();
 function element(id) {
   if (!elements.has(id)) {
     const ctx = { fillRect() {}, drawImage() {}, getImageData: () => ({ data: [] }) };
     elements.set(id, {
       id, value: "", checked: false, disabled: false, textContent: "", className: "", innerHTML: "", width: 560, height: 560,
-      addEventListener: (type, fn) => { (handlers[id] ||= {})[type] = fn; },
+      addEventListener: (type, fn) => {
+        (handlers[id] ||= {})[type] = fn;
+        if (id === "reset") resetHandlers.push(fn); // every page instance, so cleanup can stop them all
+      },
       getContext: () => ctx,
       // <video> bits used by the scanner
       videoWidth: 640, videoHeight: 480, readyState: 4, srcObject: null, play: async () => {},
@@ -55,7 +59,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await import("../app.js");
 await sleep(50); // init(): payroll.json
 after(async () => {
-  await click("reset"); // stops the camera timer and the order poll so the process can exit
+  for (const reset of resetHandlers) await reset(); // stops camera timers and order polls so the process can exit
 });
 
 test("Send is disabled while the order request is in flight and enabled again afterwards", async () => {
@@ -97,4 +101,25 @@ test("after a PENDING answer the collector restarts, so the next frame does not 
   await sleep(450);
   assert.equal(answers(), before + 1, "no second POST of the same frames");
   assert.equal(element("progress").textContent, "answer frames: 1/2", "collection starts over");
+});
+
+test("Send is re-enabled and the error shown when applyTamper throws (non-digit account)", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (path, init) => {
+    if (path === "payroll.json") return { ok: true, status: 200, json: async () => PAYROLL.map((r, i) => (i === 6 ? [r[0], "8600000000000000000x", r[2]] : r)) };
+    return realFetch(path, init);
+  };
+  // reload the payroll the page holds: the page only fetches it at start-up, so go through a fresh import
+  const fresh = await import("../app.js?bad-payroll");
+  await sleep(50);
+  const ordersBefore = calls.filter((c) => c.path === "/api/orders" && c.method === "POST").length;
+  element("tamper").checked = true;
+  await handlers.send.click(); // handlers now belong to the fresh page instance (this test runs last)
+  globalThis.fetch = realFetch;
+  element("tamper").checked = false;
+  assert.equal(element("send").disabled, false);
+  assert.match(element("status").textContent, /digit/i);
+  assert.equal(element("status").className, "bad");
+  assert.equal(calls.filter((c) => c.path === "/api/orders" && c.method === "POST").length, ordersBefore, "no order was sent");
+  void fresh;
 });
