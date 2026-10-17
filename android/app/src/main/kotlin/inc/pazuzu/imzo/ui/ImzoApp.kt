@@ -29,7 +29,7 @@ private fun Content(state: UiState, vm: ApproverViewModel) {
     when (val s = state) {
         is UiState.Home -> HomeScreen(s.deviceId, onScanOrder = vm::startScan, onEnrol = vm::startEnrol)
         is UiState.Scanning -> CameraGate(onBack = vm::reset) {
-            ScanRequestScreen("Scan the order on the laptop", s.progress, null, vm::onFrame, vm::reset)
+            ScanRequestScreen("Scan the order on the laptop", s.progress, s.notice, vm::onFrame, vm::reset)
         }
         is UiState.EnrolScanning -> CameraGate(onBack = vm::reset) {
             ScanRequestScreen("Scan the enrolment code on the laptop", s.progress, s.notice, vm::onEnrolRequestFrame, vm::reset)

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import inc.pazuzu.imzo.DeviceKeyLost as KeyLost
 import inc.pazuzu.imzo.PromptText
+import inc.pazuzu.imzo.ScreenLockRequired
 import inc.pazuzu.imzo.SigningCancelled
 import inc.pazuzu.imzo.SigningLockedOut
 import inc.pazuzu.imzo.SigningFailed
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 internal const val LOCKOUT_NOTICE = "Too many attempts. Try again later or use the screen lock."
+internal const val NEW_CODE_NOTICE = "New code detected"
 
 sealed interface UiState {
     /** `deviceId` is the grouped device id for display. */
@@ -34,7 +36,8 @@ sealed interface UiState {
     /** The enrolment code and the `er` answer frames to play. */
     data class EnrolShowing(val code: String, val frames: List<String>) : UiState
 
-    data class Scanning(val progress: Progress?) : UiState
+    /** `notice` is "New code detected" when the scan restarted on another session; the next progress clears it. */
+    data class Scanning(val progress: Progress?, val notice: String? = null) : UiState
 
     /** `busy` while the biometric prompt / signing is in flight; `notice` is a message from a failed attempt. */
     data class Reviewing(val review: Review, val notice: String? = null, val busy: Boolean = false) : UiState
@@ -47,7 +50,7 @@ sealed interface UiState {
     /** The Keystore key is gone or replaced: the device must be enrolled again. */
     data object DeviceKeyLost : UiState
 
-    /** The Keystore refused to make or use the key: the device has no screen lock. */
+    /** The Keystore could not make the key and the device has no screen lock. */
     data object ScreenLockRequired : UiState
 }
 
@@ -57,8 +60,8 @@ sealed interface UiState {
  * do nothing until [reset]. The counter used by a cancelled or failed attempt is not refunded.
  *
  * [setPrompt] receives the system prompt text right before each signature (the app hands it to the signer).
- * [publicKey] is read lazily for display and enrolment; failures surface as [UiState.DeviceKeyLost] or
- * [UiState.ScreenLockRequired].
+ * [publicKey] is read lazily for display and enrolment; failures surface as [UiState.DeviceKeyLost],
+ * [UiState.ScreenLockRequired] or a [UiState.Rejected] "DEVICE ERROR" carrying the real message.
  */
 class ApproverViewModel(
     private val approver: Approver,
@@ -69,6 +72,7 @@ class ApproverViewModel(
     private var inFlight = false
     private var job: Job? = null
     private var epoch = 0 // bumped by reset(); a result from an older epoch is dropped
+    private var lastSid: String? = null // session id of the last progress, to notice a code switch mid-scan
 
     private val _state = MutableStateFlow<UiState>(homeState())
     val state: StateFlow<UiState> = _state
@@ -96,6 +100,7 @@ class ApproverViewModel(
         job = null
         inFlight = false
         assembler.reset()
+        lastSid = null
         _state.value = homeState()
     }
 
@@ -109,7 +114,8 @@ class ApproverViewModel(
 
     private fun keyProblem(e: Exception): UiState = when (e) {
         is KeyLost -> UiState.DeviceKeyLost
-        is IllegalStateException -> UiState.ScreenLockRequired
+        is ScreenLockRequired -> UiState.ScreenLockRequired
+        // KeystoreFailure and anything unexpected (e.g. a failed marker write): show the real message
         else -> UiState.Rejected("DEVICE ERROR", e.message.orEmpty())
     }
 
@@ -134,24 +140,29 @@ class ApproverViewModel(
         } catch (_: ProtocolError) {
             return // malformed frame: keep scanning
         }
+        // The assembler restarts on a different session id (have = 1): tell the user the code changed.
+        val newCode = lastSid != null && lastSid != progress.sid
+        lastSid = progress.sid
         val done = try {
             assembler.result()
         } catch (_: ProtocolError) {
+            lastSid = null
             setProgress(null) // CRC failure: the assembler has reset itself, scan again
             return
         }
         if (done == null) {
-            setProgress(progress)
+            setProgress(progress, if (newCode) NEW_CODE_NOTICE else null)
             return
         }
         assembler.reset()
+        lastSid = null
         whenComplete(done.first, done.second)
     }
 
-    private fun setProgress(progress: Progress?) {
+    private fun setProgress(progress: Progress?, notice: String? = null) {
         _state.value = when (val s = _state.value) {
-            is UiState.Scanning -> UiState.Scanning(progress)
-            is UiState.EnrolScanning -> UiState.EnrolScanning(progress)
+            is UiState.Scanning -> UiState.Scanning(progress, notice)
+            is UiState.EnrolScanning -> UiState.EnrolScanning(progress, notice)
             else -> s
         }
     }

@@ -1,11 +1,11 @@
 package inc.pazuzu.imzo
 
 import android.content.Context
+import android.app.KeyguardManager
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
@@ -41,7 +41,7 @@ class KeystoreSigner(
     constructor(activity: FragmentActivity) : this(activity.applicationContext, { activity })
 
     private val registry = DeviceKeyRegistry(
-        AndroidKeystoreBackend,
+        AndroidKeystoreBackend(context.applicationContext),
         PrefsKeyMarkerStore(context.applicationContext.getSharedPreferences(MARKER_FILE, Context.MODE_PRIVATE)),
     )
 
@@ -143,7 +143,7 @@ internal class PrefsKeyMarkerStore(private val prefs: SharedPreferences) : KeyMa
 }
 
 /** The Android Keystore entry `imzo-device-key`. */
-internal object AndroidKeystoreBackend : DeviceKeyBackend {
+internal class AndroidKeystoreBackend(private val context: Context) : DeviceKeyBackend {
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
     override fun existingPublicKey(): ByteArray? =
@@ -151,11 +151,10 @@ internal object AndroidKeystoreBackend : DeviceKeyBackend {
 
     override fun privateKey(): PrivateKey? = keyStore().getKey(KeystoreSigner.ALIAS, null) as? PrivateKey
 
+    /** StrongBox first, then the TEE (same spec, still user-auth-required); see [generateWithFallback]. */
     override fun create(): ByteArray = uncompressedPoint(
-        try {
-            generateKeyPair(strongBox = true)
-        } catch (_: StrongBoxUnavailableException) {
-            generateKeyPair(strongBox = false)
+        generateWithFallback(::generateKeyPair) {
+            context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure ?: false
         },
     )
 
@@ -169,16 +168,8 @@ internal object AndroidKeystoreBackend : DeviceKeyBackend {
             .setInvalidatedByBiometricEnrollment(true)
             .setIsStrongBoxBacked(strongBox)
             .build()
-        try {
-            val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
-            generator.initialize(spec)
-            return generator.generateKeyPair().public as ECPublicKey
-        } catch (e: StrongBoxUnavailableException) {
-            throw e
-        } catch (e: java.security.GeneralSecurityException) {
-            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
-        } catch (e: java.security.ProviderException) {
-            throw IllegalStateException("Cannot create the device key (is a screen lock set?): ${e.message}", e)
-        }
+        val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER)
+        generator.initialize(spec)
+        return generator.generateKeyPair().public as ECPublicKey
     }
 }

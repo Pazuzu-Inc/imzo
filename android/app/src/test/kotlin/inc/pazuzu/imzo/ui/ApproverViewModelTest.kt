@@ -1,13 +1,16 @@
 package inc.pazuzu.imzo.ui
 
 import inc.pazuzu.imzo.DeviceKeyLost
+import inc.pazuzu.imzo.KeystoreFailure
 import inc.pazuzu.imzo.PromptText
+import inc.pazuzu.imzo.ScreenLockRequired
 import inc.pazuzu.imzo.SigningCancelled
 import inc.pazuzu.imzo.SigningLockedOut
 import inc.pazuzu.imzo.SigningFailed
 import inc.pazuzu.imzo.protocol.Approver
 import inc.pazuzu.imzo.protocol.Cbor
 import inc.pazuzu.imzo.protocol.Frames
+import inc.pazuzu.imzo.protocol.Progress
 import inc.pazuzu.imzo.protocol.enrolmentCode
 import inc.pazuzu.imzo.protocol.deviceId
 import kotlinx.coroutines.CompletableDeferred
@@ -97,6 +100,49 @@ class ApproverViewModelTest {
         assertEquals(sampleItems.size, r.count)
         assertEquals(sampleItems.sumOf { it.amount }, r.total)
         assertEquals(sampleItems, r.items)
+    }
+
+    @Test
+    fun aNewSessionMidScanShowsANoticeThatTheNextProgressClears() {
+        vm.startScan()
+        val a = frames("rq", myRequest(), sid = "aaaa")
+        val b = frames("rq", myRequest(), sid = "bbbb")
+        vm.onFrame(a[0])
+        assertEquals(UiState.Scanning(Progress(1, a.size, "aaaa")), state)
+        vm.onFrame(a[0]) // a repeat of the same part: no notice
+        assertNull((state as UiState.Scanning).notice)
+        vm.onFrame(b[0]) // another code takes over, restarting at one part
+        val switched = state as UiState.Scanning
+        assertEquals(1, switched.progress!!.have)
+        assertEquals("bbbb", switched.progress!!.sid)
+        assertEquals("New code detected", switched.notice)
+        vm.onFrame(b[1])
+        val next = state as UiState.Scanning
+        assertEquals(2, next.progress!!.have)
+        assertNull(next.notice)
+    }
+
+    @Test
+    fun theFirstFrameOfAScanHasNoNewCodeNotice() {
+        vm.startScan()
+        vm.onFrame(frames("rq", myRequest(), sid = "aaaa")[0])
+        assertNull((state as UiState.Scanning).notice)
+        vm.reset()
+        vm.startScan() // a fresh scan forgets the old session
+        vm.onFrame(frames("rq", myRequest(), sid = "bbbb")[0])
+        assertNull((state as UiState.Scanning).notice)
+    }
+
+    @Test
+    fun aNewSessionWhileEnrollingShowsTheNoticeToo() {
+        vm.startEnrol()
+        val a = frames("en", enrolRequest(), sid = "aaaa", chunk = 8)
+        val b = frames("en", enrolRequest(), sid = "bbbb", chunk = 8)
+        vm.onEnrolRequestFrame(a[0])
+        vm.onEnrolRequestFrame(b[0])
+        assertEquals("New code detected", (state as UiState.EnrolScanning).notice)
+        vm.onEnrolRequestFrame(b[1])
+        assertNull((state as UiState.EnrolScanning).notice)
     }
 
     @Test
@@ -315,12 +361,35 @@ class ApproverViewModelTest {
 
     @Test
     fun noScreenLockIsADedicatedState() {
-        signer = TestSigner().apply { publicKeyError = IllegalStateException("Cannot create the device key") }
+        signer = TestSigner().apply { publicKeyError = ScreenLockRequired("Set a screen lock to use Imzo") }
         vm = ApproverViewModel(Approver(signer, TestCounter())) { signer.publicKey }
         assertEquals(UiState.ScreenLockRequired, state)
         signer.publicKeyError = null
         vm.reset() // "Try again" after setting a lock
         assertTrue(state is UiState.Home)
+    }
+
+    @Test
+    fun keystoreFailureShowsItsMessageNotTheScreenLockState() {
+        signer = TestSigner().apply { publicKeyError = KeystoreFailure("Cannot create the device key: tee says no") }
+        vm = ApproverViewModel(Approver(signer, TestCounter())) { signer.publicKey }
+        assertEquals(UiState.Rejected("DEVICE ERROR", "Cannot create the device key: tee says no"), state)
+    }
+
+    @Test
+    fun anArbitraryIllegalStateIsNotMappedToScreenLockRequired() {
+        // e.g. DeviceKeyRegistry failing to persist its marker after the key was made
+        signer = TestSigner().apply { publicKeyError = IllegalStateException("could not persist the device key marker") }
+        vm = ApproverViewModel(Approver(signer, TestCounter())) { signer.publicKey }
+        assertEquals(UiState.Rejected("DEVICE ERROR", "could not persist the device key marker"), state)
+    }
+
+    @Test
+    fun screenLockRequiredWhileEnrollingIsTheDedicatedState() {
+        vm.startEnrol()
+        signer.publicKeyError = ScreenLockRequired("Set a screen lock to use Imzo")
+        frames("en", enrolRequest(), chunk = 20).forEach { vm.onEnrolRequestFrame(it) }
+        assertEquals(UiState.ScreenLockRequired, state)
     }
 
     // ---------------------------------------------------------------- enrolment

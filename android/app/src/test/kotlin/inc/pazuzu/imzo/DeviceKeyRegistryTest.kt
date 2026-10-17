@@ -80,13 +80,13 @@ class DeviceKeyRegistryTest {
     }
 
     @Test
-    fun signWithMissingKeyThrowsSigningFailedAndNeverCreates() {
+    fun signWithMissingKeyThrowsDeviceKeyLostAndNeverCreates() {
         val b = FakeBackend(null, null, pub(2))
-        val ex = assertThrows(SigningFailed::class.java) { DeviceKeyRegistry(b, FakeMarker()).keyForSigning() }
+        val ex = assertThrows(DeviceKeyLost::class.java) { DeviceKeyRegistry(b, FakeMarker()).keyForSigning() }
         assertEquals("device key missing; enrol this device again", ex.message)
         assertEquals(0, b.creates)
         // also with a marker present
-        val ex2 = assertThrows(SigningFailed::class.java) {
+        val ex2 = assertThrows(DeviceKeyLost::class.java) {
             DeviceKeyRegistry(b, FakeMarker(DeviceKeyRegistry.markerFor(pub(1)))).keyForSigning()
         }
         assertEquals("device key missing; enrol this device again", ex2.message)
@@ -94,9 +94,17 @@ class DeviceKeyRegistryTest {
     }
 
     @Test
-    fun signWithReplacedKeyThrows() {
+    fun signWithMissingPrivateKeyHandleThrowsDeviceKeyLost() {
+        val b = FakeBackend(pub(1), null, pub(2))
+        assertThrows(DeviceKeyLost::class.java) {
+            DeviceKeyRegistry(b, FakeMarker(DeviceKeyRegistry.markerFor(pub(1)))).keyForSigning()
+        }
+    }
+
+    @Test
+    fun signWithReplacedKeyThrowsDeviceKeyLost() {
         val b = FakeBackend(pub(2), ecKey, pub(3))
-        assertThrows(SigningFailed::class.java) {
+        assertThrows(DeviceKeyLost::class.java) {
             DeviceKeyRegistry(b, FakeMarker(DeviceKeyRegistry.markerFor(pub(1)))).keyForSigning()
         }
     }
