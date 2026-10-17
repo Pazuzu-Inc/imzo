@@ -312,6 +312,9 @@ function renderPayroll() {
 async function init() {
   setTamper(false); // never trust restored form state: a ticked box would silently alter the order
   $("tamper").addEventListener("change", syncTamperLabel);
+  // Browsers may apply restored form state late, and a back/forward-cache restore brings the old state back.
+  window.addEventListener("pageshow", () => setTamper(false)); // persisted or not
+  window.addEventListener("load", () => setTamper(false));
   $("enrolBegin").addEventListener("click", beginEnrol);
   $("send").addEventListener("click", sendOrder);
   $("auditFetch").addEventListener("click", refreshAudit);

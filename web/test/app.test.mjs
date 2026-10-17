@@ -23,6 +23,11 @@ function element(id) {
   }
   return elements.get(id);
 }
+const windowListeners = {};
+globalThis.window = {
+  addEventListener: (type, fn) => (windowListeners[type] ||= []).push(fn),
+  dispatch: (type, event = {}) => (windowListeners[type] || []).forEach((fn) => fn(event)),
+};
 globalThis.document = { getElementById: element, createElement: () => element("offscreen") };
 const click = (id) => handlers[id].click();
 
@@ -211,3 +216,13 @@ test("a fresh page instance starts with the tamper box unticked even if the DOM 
   assert.equal(element("tamper").checked, false);
   assert.doesNotMatch(element("tamperLabel").className, /armed/);
 });
+
+for (const [type, event] of [["pageshow", { persisted: true }], ["pageshow", { persisted: false }], ["load", {}]]) {
+  test(`${type} (${JSON.stringify(event)}) unticks a tamper box the browser restored as ticked`, () => {
+    element("tamper").checked = true;
+    element("tamperLabel").className = "armed";
+    window.dispatch(type, event);
+    assert.equal(element("tamper").checked, false);
+    assert.doesNotMatch(element("tamperLabel").className, /armed/);
+  });
+}
