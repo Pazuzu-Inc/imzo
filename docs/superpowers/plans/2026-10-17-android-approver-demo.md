@@ -25,7 +25,7 @@
 
 ## Review Focus
 
-1. **Names with code points that Python 3.11 and Android classify differently** (unassigned or newly added characters): both sides must reject as "has control characters"; Kotlin treats unassigned (`Cn`) as control. Pinned in Task 3.
+1. **Names with code points that Python 3.11 and Android classify differently** (unassigned or newly added characters): both sides reject unassigned (`Cn`) as "has control characters", but the two Unicode tables differ (Android 14+ ICU is newer than Python 3.11), so a character can make either side stricter or looser than the other; the shared cases are pinned in Task 3.
 2. **Frames from two different orders alternating on screen** (an old QR still playing, then a new one): the assembler must not mix them; a new session id resets and the screen says so. Pinned in Task 4.
 3. **App killed after signing but before the answer is shown, or the counter store failing**: the counter is persisted before the answer is returned, so a later signature never reuses a counter. Pinned in Task 7.
 4. **Request QR for a different device** (another approver's order): shows WRONG DEVICE and offers no way to sign. Pinned in Task 4 and Task 9.
@@ -207,7 +207,7 @@
 **Interfaces:**
 - Consumes: `Approver`, `Signer`, `CounterStore`, `FrameAssembler`, `Frames`, `enrolmentCode` (Tasks 3, 4, 7, 8).
 - Produces: `class ApproverViewModel(approver: Approver, scanner: ...)` exposing `state: StateFlow<UiState>` with `sealed interface UiState { Home; Enrolling(code: String, frames: List<String>); Scanning(progress: Progress?); Reviewing(review: Review); Rejected(reason: String); Answer(frames: List<String>, approved: Boolean) }`; functions `startScan()`, `onFrame(text)`, `approve()`, `reject()`, `startEnrol()`, `onEnrolRequestFrame(text)`, `reset()`.
-- Screen content: ReviewScreen shows `op`, `ref`, "Approval `k` of `n`", the **count and recomputed total in large type**, the fingerprint in monospace groups, then every item in full (name, account, amount) in a scrollable list; Approve and Reject at the bottom. EnrolScreen shows the six-digit code in large type and the `er` QR frames. Home shows a persistent line "No internet access: camera only" and the device id fingerprint.
+- Screen content: ReviewScreen shows `op`, `ref`, "Approval `k` of `n`", the **count and recomputed total in large type**, the fingerprint in monospace groups, then every item in full (name, account, amount) in a scrollable list; Approve and Reject at the bottom. EnrolScreen shows the six-digit code in large type and the `er` QR frames. Home shows a persistent line "No internet permission: talks only through QR codes" and the device id fingerprint.
 
 - [ ] **Step 1: Write `ApproverViewModelTest`** (fake `Signer` and `CounterStore`): feeding request frames of the vector request moves `Scanning` to `Reviewing` with `count == item_count`; a request for another device moves to `Rejected("WRONG DEVICE")` and `approve()` is a no-op there; `approve()` yields `Answer` whose frames decode (via `Frames.decode`) to a response with `dec == 1`; `reject()` yields `dec == 0`; a signer that throws (cancelled biometric) returns to `Reviewing` with the same review and no counter consumed beyond the one already persisted; garbage text in `Scanning` is ignored without crashing; after `reset()` state is `Home`.
 - [ ] **Step 2: Run `./gradlew :app:testDebugUnitTest`; expected: FAIL.**

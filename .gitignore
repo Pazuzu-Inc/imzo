@@ -3,3 +3,13 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/settings.local.json
+.superpowers/
+android/local.properties
+android/.gradle/
+android/**/build/
+*.apk
+.idea/
+android/.kotlin/
+*.iml
+*.keystore
+*.jks

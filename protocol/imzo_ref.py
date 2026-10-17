@@ -230,7 +230,11 @@ def _is_digits(s: str) -> bool:
 def _check_text(s: str, max_bytes: int, what: str) -> None:
     if not isinstance(s, str) or not s:
         raise ProtocolError("BAD FORMAT", f"{what} must be non-empty text")
-    if len(s.encode("utf-8")) > max_bytes:
+    try:
+        size = len(s.encode("utf-8"))
+    except UnicodeEncodeError:  # lone surrogate
+        raise ProtocolError("BAD FORMAT", f"{what} has control characters") from None
+    if size > max_bytes:
         raise ProtocolError("BAD FORMAT", f"{what} too long")
     if unicodedata.normalize("NFC", s) != s:
         raise ProtocolError("BAD FORMAT", f"{what} not NFC")
@@ -415,6 +419,8 @@ class Server:
     """Approval service: stores orders, verifies answers, runs maker-checker, keeps a hash-chained audit log."""
 
     LOCK_AFTER_FAILURES = 5
+    ENROL_TTL = 300  # seconds a pending enrolment challenge stays valid
+    MAX_PENDING_ENROLMENTS = 32
 
     def __init__(self, now: Callable[[], float] = time.time):
         self._now = now
@@ -423,15 +429,65 @@ class Server:
         self.orders: dict[str, _Order] = {}
         self.audit: list[dict] = []
         self.executed: list[dict] = []  # what the mock core received
+        self._pending_enrol: dict[bytes, dict] = {}  # nonce -> {user, org, expires_at}
 
     # -- devices
 
     def register_device(self, public_key: bytes, user: str) -> bytes:
         load_public(public_key)  # raises if not a valid P-256 point
         dev = device_id(public_key)
+        if dev in self.devices:  # never reset counter, failures or status of a known device
+            raise ProtocolError("ALREADY ENROLLED")
         self.devices[dev] = {"pub": public_key, "user": user, "status": "ACTIVE", "last_ctr": 0, "fails": 0}
         self._log("device_registered", dev=dev, user=user)
         return dev
+
+    def begin_enrolment(self, user: str, org: str = "demo") -> tuple[bytes, bytes]:
+        """Issue a single-use challenge. Returns (nonce, body of the `en` message)."""
+        now = self._now()
+        self._pending_enrol = {n: p for n, p in self._pending_enrol.items() if p["expires_at"] >= now}
+        while len(self._pending_enrol) >= self.MAX_PENDING_ENROLMENTS:
+            self._pending_enrol.pop(next(iter(self._pending_enrol)))  # drop the oldest
+        nonce = os.urandom(16)
+        self._pending_enrol[nonce] = {"user": user, "org": org, "expires_at": now + self.ENROL_TTL}
+        self._log("enrolment_started", user=user, org=org)
+        return nonce, dumps({"v": 1, "nonce": nonce, "org": org})
+
+    def finish_enrolment(self, answer_bytes: bytes) -> bytes:
+        """Verify the proof of possession from Device.enrolment_answer and register the device.
+
+        The answer does not name its nonce, so it is checked against each pending challenge;
+        the one it verifies against is consumed (single use). Returns the device id."""
+        obj = loads(answer_bytes)
+        if not isinstance(obj, dict) or set(obj) != {"pub", "sig"}:
+            raise ProtocolError("BAD FORMAT", "wrong or missing fields")
+        pub, sig = obj["pub"], obj["sig"]
+        if not isinstance(pub, bytes) or not isinstance(sig, bytes) or len(sig) != 64:
+            raise ProtocolError("BAD FORMAT", "pub and sig must be bytes")
+        try:
+            key = load_public(pub)
+        except ValueError as exc:
+            raise ProtocolError("BAD FORMAT", "invalid public key") from exc
+        der = der_from_raw(sig)
+        now = self._now()
+        for nonce, pending in list(self._pending_enrol.items()):
+            if pending["expires_at"] < now:
+                del self._pending_enrol[nonce]
+                continue
+            msg = b"IMZO/1/enrol\x00" + nonce + pending["org"].encode("utf-8")
+            try:
+                key.verify(der, msg, ec.ECDSA(hashes.SHA256()))
+            except InvalidSignature:
+                continue
+            del self._pending_enrol[nonce]  # consumed even if the enrolment is refused below
+            if device_id(pub) not in self.devices and any(
+                d["user"] == pending["user"] and d["status"] in ("ACTIVE", "LOCKED") for d in self.devices.values()
+            ):
+                # one live (ACTIVE or LOCKED) device per user, so neither a later enrolment nor locking the device
+                # by forged answers lets someone take over a user's orders; only REVOKED (or a reset) frees the slot
+                raise ProtocolError("USER ALREADY HAS A DEVICE")
+            return self.register_device(pub, pending["user"])
+        raise ProtocolError("BAD SIGNATURE")
 
     def revoke_device(self, dev: bytes) -> None:
         self.devices[dev]["status"] = "REVOKED"
@@ -557,8 +613,20 @@ def _b64u(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+_B64U_ALPHABET = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+
+
 def _unb64u(text: str) -> bytes:
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    """Strict unpadded base64url: only [A-Za-z0-9_-], canonical trailing bits (so one encoding per value)."""
+    if not all(c in _B64U_ALPHABET for c in text):
+        raise ProtocolError("BAD FORMAT", "bad base64")
+    try:
+        raw = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    except Exception as exc:  # noqa: BLE001 - e.g. impossible length
+        raise ProtocolError("BAD FORMAT", "bad base64") from exc
+    if _b64u(raw) != text:
+        raise ProtocolError("BAD FORMAT", "bad base64")
+    return raw
 
 
 KINDS = ("rq", "rs", "en", "er")
@@ -584,7 +652,7 @@ def frames_decode(frames: Iterable[str]) -> tuple[str, bytes]:
         if len(pieces) != 6 or pieces[0] != "IMQ1" or pieces[1] not in KINDS:
             raise ProtocolError("BAD FORMAT", "not an IMQ1 frame")
         _, k, s, i_text, n_text, data = pieces
-        if not (i_text.isdigit() and n_text.isdigit()):
+        if not all(t.isascii() and t.isdigit() for t in (i_text, n_text)):
             raise ProtocolError("BAD FORMAT", "bad frame counters")
         i, n = int(i_text), int(n_text)
         if not 1 <= i <= n <= 256:
@@ -593,10 +661,7 @@ def frames_decode(frames: Iterable[str]) -> tuple[str, bytes]:
             kind, sid, total = k, s, n
         elif (k, s, n) != (kind, sid, total):
             raise ProtocolError("BAD FORMAT", "frames from different messages")
-        try:
-            parts[i] = _unb64u(data)
-        except Exception as exc:  # noqa: BLE001 - any decode problem is a bad frame
-            raise ProtocolError("BAD FORMAT", "bad base64") from exc
+        parts[i] = _unb64u(data)
     if kind is None or len(parts) != total:
         raise ProtocolError("INCOMPLETE")
     payload = b"".join(parts[i] for i in range(1, total + 1))
