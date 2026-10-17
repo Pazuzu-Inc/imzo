@@ -230,7 +230,11 @@ def _is_digits(s: str) -> bool:
 def _check_text(s: str, max_bytes: int, what: str) -> None:
     if not isinstance(s, str) or not s:
         raise ProtocolError("BAD FORMAT", f"{what} must be non-empty text")
-    if len(s.encode("utf-8")) > max_bytes:
+    try:
+        size = len(s.encode("utf-8"))
+    except UnicodeEncodeError:  # lone surrogate
+        raise ProtocolError("BAD FORMAT", f"{what} has control characters") from None
+    if size > max_bytes:
         raise ProtocolError("BAD FORMAT", f"{what} too long")
     if unicodedata.normalize("NFC", s) != s:
         raise ProtocolError("BAD FORMAT", f"{what} not NFC")
@@ -432,6 +436,8 @@ class Server:
     def register_device(self, public_key: bytes, user: str) -> bytes:
         load_public(public_key)  # raises if not a valid P-256 point
         dev = device_id(public_key)
+        if dev in self.devices:  # never reset counter, failures or status of a known device
+            raise ProtocolError("ALREADY ENROLLED")
         self.devices[dev] = {"pub": public_key, "user": user, "status": "ACTIVE", "last_ctr": 0, "fails": 0}
         self._log("device_registered", dev=dev, user=user)
         return dev

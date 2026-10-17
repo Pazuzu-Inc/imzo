@@ -3,12 +3,15 @@
 Run from the repo root:  .venv/bin/python backend/app.py [--host 127.0.0.1] [--port 8080]
 Serves the API under /api and the static files in web/ at /. Standard library plus imzo_ref only.
 Not for production: the Server is in memory and guarded by one lock.
+Only requests whose Host is 127.0.0.1:<port> or localhost:<port> are served (DNS-rebinding guard), so
+binding to another address does not make the demo reachable from other machines.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
 import mimetypes
 import os
 import sys
@@ -27,6 +30,7 @@ WEB_DIR = ROOT / "web"
 MAX_BODY = 1024 * 1024
 MAX_FRAMES = 1024
 MAX_NAME = 64
+log = logging.getLogger("imzo.backend")
 
 
 class BadRequest(Exception):
@@ -40,10 +44,6 @@ class State:
         self.lock = threading.Lock()
         self.server = imzo.Server()
 
-    def reset(self) -> None:
-        with self.lock:
-            self.server = imzo.Server()
-
 
 STATE = State()
 
@@ -55,6 +55,10 @@ def _name(body: dict, key: str) -> str:
     v = body.get(key)
     if not isinstance(v, str) or not v or len(v) > MAX_NAME:
         raise BadRequest(key)
+    try:  # same text rules as the protocol: NFC, no control/format/surrogate/private-use/unassigned, <= 64 bytes
+        imzo._check_text(v, imzo.MAX_NAME_BYTES, key)
+    except ProtocolError:
+        raise BadRequest(key) from None
     return v
 
 
@@ -165,6 +169,7 @@ POST_ROUTES = {
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "ImzoDemo/1"
+    timeout = 10  # seconds; a slow or stalled client cannot hold a thread forever
 
     def log_message(self, fmt, *args):  # quiet unless serve(..., verbose=True)
         if getattr(self.server, "verbose", False):
@@ -184,6 +189,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _error(self, status: int, code: str) -> None:
         self._send(status, {"error": code})
+
+    def _local_host(self) -> str | None:
+        """The Host header if it names this server on a loopback name, else None (DNS-rebinding guard)."""
+        host = self.headers.get("Host") or ""
+        port = self.server.server_address[1]
+        return host if host in (f"127.0.0.1:{port}", f"localhost:{port}") else None
+
+    def _same_origin(self, host: str) -> bool:
+        origin = self.headers.get("Origin")
+        return origin is None or origin == f"http://{host}"
 
     def _read_json(self) -> dict:
         try:
@@ -218,6 +233,12 @@ class Handler(BaseHTTPRequestHandler):
         route = POST_ROUTES.get(path)
         if route is None:
             return self._error(404, "NOT FOUND")
+        host = self._local_host()
+        if host is None or not self._same_origin(host):
+            return self._error(403, "FORBIDDEN")
+        ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if ctype != "application/json":
+            return self._error(415, "BAD REQUEST")
         try:
             body = self._read_json()
             with STATE.lock:
@@ -229,14 +250,19 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, "BAD REQUEST")
         except ProtocolError as exc:
             self._error(400, exc.code)
-        except (TypeError, ValueError, KeyError, IndexError):
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            log.debug("lookup/type error in %s: %s", path, type(exc).__name__, exc_info=True)
             self._error(400, "BAD REQUEST")
+        except TimeoutError:  # client stalled mid-body; nothing useful to answer
+            self.close_connection = True
         except Exception:  # noqa: BLE001 - never leak a traceback to the client
             self.log_error("unhandled error in %s", path)
             self._error(500, "INTERNAL")
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if self._local_host() is None:
+            return self._error(403, "FORBIDDEN")
         try:
             if path == "/api/audit":
                 with STATE.lock:
@@ -256,6 +282,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             self.log_error("unhandled error in %s", path)
             self._error(500, "INTERNAL")
+
+    def _method_not_allowed(self) -> None:
+        data = json.dumps({"error": "METHOD NOT ALLOWED"}).encode("utf-8")
+        self.send_response(405)
+        self.send_header("Allow", "GET, POST")
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _method_not_allowed
 
     def _static(self, url_path: str) -> None:
         rel = unquote(url_path).lstrip("/")

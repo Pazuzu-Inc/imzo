@@ -3,11 +3,14 @@
 import http.client
 import json
 import os
+import socket
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "protocol"))
@@ -218,6 +221,149 @@ class ErrorTests(BackendCase):
     def test_unknown_routes_and_methods(self):
         self.assertEqual(self.call("GET", "/api/nope")[0], 404)
         self.assertEqual(self.call("POST", "/api/audit", {})[0], 404)
+
+
+class NameValidationTests(BackendCase):
+    def test_lone_surrogate_name_is_a_clean_400_and_leaves_no_state(self):
+        for bad in ("a\ud800b", "\udfff", "x\u0000y", "e\u0301", "a\u200bb", "\ue000", "\u0378", "n" * 65, "\u00e9" * 33):
+            status, out = self.call("POST", "/api/enrol/begin", {"user": bad})
+            self.assertEqual((status, out), (400, {"error": "BAD REQUEST"}), repr(bad))
+        # raw JSON escape of a lone surrogate, as a browser would send it
+        status, out = self.call("POST", "/api/enrol/begin", raw=b'{"user": "a\\ud800b"}')
+        self.assertEqual((status, out), (400, {"error": "BAD REQUEST"}))
+        self.assertEqual(backend.STATE.server._pending_enrol, {})
+        self.assertEqual(self.call("GET", "/api/audit")[1], {"ok": True, "rows": []})
+
+    def test_bad_maker_or_approver_name_creates_no_order(self):
+        self.enrol()
+        for key in ("maker", "approver"):
+            body = {"maker": "mike", "approver": "alice", "ref": "r", "items": ITEMS}
+            body[key] = "a\ud800"
+            self.assertEqual(self.call("POST", "/api/orders", body), (400, {"error": "BAD REQUEST"}))
+        self.assertEqual(backend.STATE.server.orders, {})
+        self.assertEqual([r["kind"] for r in self.call("GET", "/api/audit")[1]["rows"]],
+                         ["enrolment_started", "device_registered"])
+
+    def test_ordinary_unicode_names_are_accepted(self):
+        status, _ = self.call("POST", "/api/enrol/begin", {"user": "Aziza Karimova \u00e9"})
+        self.assertEqual(status, 200)
+
+
+class ReEnrolmentTests(BackendCase):
+    def test_re_enrolling_a_known_device_is_refused_and_changes_nothing(self):
+        dev, answer, status, _ = self.enrol("alice")
+        self.assertEqual(status, 200)
+        info = backend.STATE.server.devices[dev.id]
+        info.update(last_ctr=5, fails=2, status="LOCKED")
+        snapshot, rows = dict(info), len(backend.STATE.server.audit)
+        status, begin = self.call("POST", "/api/enrol/begin", {"user": "mallory"})
+        msg = imzo.loads(imzo.frames_decode(begin["frames"])[1])
+        again = imzo.frames_encode("er", imzo.dumps(dev.enrolment_answer(msg["nonce"], msg["org"])))
+        status, out = self.call("POST", "/api/enrol/finish", {"frames": again})
+        self.assertEqual((status, out), (400, {"error": "ALREADY ENROLLED"}))
+        self.assertEqual(backend.STATE.server.devices[dev.id], snapshot)
+        self.assertEqual(len(backend.STATE.server.audit), rows + 1)  # only enrolment_started
+        status, out = self.call("POST", "/api/enrol/finish", {"frames": again})
+        self.assertEqual((status, out), (400, {"error": "BAD SIGNATURE"}))  # nonce was consumed
+
+
+class RequestGuardTests(BackendCase):
+    def host(self, name="127.0.0.1"):
+        return f"{name}:{self.port}"
+
+    def test_post_requires_json_content_type(self):
+        for ctype in ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", ""):
+            status, out = self.call("POST", "/api/enrol/begin", raw=b'{"user":"alice"}', headers={"Content-Type": ctype})
+            self.assertEqual((status, out), (415, {"error": "BAD REQUEST"}), ctype)
+        self.assertEqual(backend.STATE.server._pending_enrol, {})
+
+    def test_json_content_type_with_charset_and_localhost_host_are_accepted(self):
+        status, _ = self.call("POST", "/api/enrol/begin", {"user": "alice"},
+                              headers={"Content-Type": "Application/JSON; charset=utf-8", "Host": self.host("localhost")})
+        self.assertEqual(status, 200)
+
+    def test_post_without_body_still_needs_json_content_type(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("POST", "/api/reset")
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 415)
+        conn.close()
+
+    def test_foreign_host_header_is_forbidden_for_post_and_get(self):
+        for host in ("evil.example", "evil.example:%d" % self.port, "127.0.0.1:1", "127.0.0.1", "localhost.evil.example:%d" % self.port,
+                     "127.0.0.1:%d.evil.example" % self.port, "", "[::1]:%d" % self.port):
+            hdr = {"Host": host}
+            self.assertEqual(self.call("POST", "/api/enrol/begin", {"user": "alice"}, headers=hdr),
+                             (403, {"error": "FORBIDDEN"}), host)
+            self.assertEqual(self.call("GET", "/api/audit", headers=hdr), (403, {"error": "FORBIDDEN"}), host)
+            self.assertEqual(self.call("GET", "/", headers=hdr), (403, {"error": "FORBIDDEN"}), host)
+        self.assertEqual(backend.STATE.server._pending_enrol, {})
+
+    def test_cross_site_origin_is_forbidden(self):
+        for origin in ("http://evil.example", "https://127.0.0.1:%d" % self.port, "http://localhost:%d" % self.port, "null",
+                       "http://127.0.0.1:%d/" % self.port):
+            status, out = self.call("POST", "/api/enrol/begin", {"user": "alice"}, headers={"Origin": origin})
+            self.assertEqual((status, out), (403, {"error": "FORBIDDEN"}), origin)
+        self.assertEqual(backend.STATE.server._pending_enrol, {})
+
+    def test_same_origin_post_is_accepted(self):
+        for name in ("127.0.0.1", "localhost"):
+            origin = f"http://{self.host(name)}"
+            status, _ = self.call("POST", "/api/enrol/begin", {"user": "alice"}, headers={"Origin": origin, "Host": self.host(name)})
+            self.assertEqual(status, 200, name)
+
+    def test_get_with_cross_origin_header_only_checks_host(self):
+        status, _ = self.call("GET", "/api/audit", headers={"Origin": "http://evil.example"})
+        self.assertEqual(status, 200)
+
+
+class HandlerHygieneTests(BackendCase):
+    def test_unsupported_verbs_answer_json_405(self):
+        for method in ("PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            conn.request(method, "/api/orders", body=None if method in ("HEAD", "OPTIONS") else b"{}",
+                         headers={"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            data = resp.read()
+            self.assertEqual(resp.status, 405, method)
+            self.assertEqual(resp.getheader("Content-Type"), "application/json")
+            if method != "HEAD":
+                self.assertEqual(json.loads(data), {"error": "METHOD NOT ALLOWED"}, method)
+            else:
+                self.assertEqual(data, b"")
+            conn.close()
+
+    def test_socket_timeout_is_ten_seconds(self):
+        self.assertEqual(backend.Handler.timeout, 10)
+
+    def test_slow_client_is_dropped_after_the_timeout(self):
+        with mock.patch.object(backend.Handler, "timeout", 0.3):
+            for partial in (b"POST /api/reset HTTP/1.1\r\nHost: 127.0.0.1:%d\r\n" % self.port,  # headers never finish
+                            b"POST /api/reset HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\n"
+                            b"Content-Length: 50\r\n\r\n{" % self.port):  # body never finishes
+                sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+                sock.sendall(partial)
+                started = time.monotonic()
+                try:
+                    while sock.recv(4096):
+                        pass
+                except ConnectionResetError:
+                    pass
+                self.assertLess(time.monotonic() - started, 3)
+                sock.close()
+        self.assertEqual(self.call("GET", "/api/executed")[0], 200)  # server still serves
+
+    def test_state_has_no_unused_reset(self):
+        self.assertFalse(hasattr(backend.State, "reset"))
+
+    def test_unexpected_lookup_errors_are_logged_at_debug_and_answered_400(self):
+        def boom(_body):
+            raise KeyError("missing")
+        with mock.patch.dict(backend.POST_ROUTES, {"/api/boom": boom}):
+            with self.assertLogs("imzo.backend", level="DEBUG") as logs:
+                status, out = self.call("POST", "/api/boom", {})
+        self.assertEqual((status, out), (400, {"error": "BAD REQUEST"}))
+        self.assertTrue(any("KeyError" in line for line in logs.output), logs.output)
 
 
 class StaticTests(BackendCase):
