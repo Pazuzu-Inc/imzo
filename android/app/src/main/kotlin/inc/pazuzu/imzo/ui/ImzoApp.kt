@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 
 /** The whole app: a plain `when (state)` over the view model's [UiState]. */
 @Composable
@@ -38,13 +39,19 @@ private fun Content(state: UiState, vm: ApproverViewModel) {
         is UiState.Reviewing -> ReviewScreen(s, onApprove = vm::approve, onReject = vm::reject)
         is UiState.Answer -> AnswerScreen(s, onDone = vm::reset)
         is UiState.Rejected -> ErrorScreen(s.reason, s.detail, "Back", vm::reset)
-        UiState.DeviceKeyLost -> ErrorScreen(
-            "DEVICE KEY LOST",
-            "This device's key is gone or was replaced, so it can no longer approve anything. " +
-                "It must be enrolled again: clear this app's data in Android settings, then enrol it.",
-            "Back",
-            vm::reset,
-        )
+        // Going back cannot bring the key back: the only way out is clearing the app's data, then enrolling again.
+        UiState.DeviceKeyLost -> {
+            val context = LocalContext.current
+            ErrorScreen(
+                "DEVICE KEY LOST",
+                "This device's key is gone or was replaced, so it can no longer approve anything. " +
+                    "Open the app settings, choose Storage, then Clear data, and enrol this device again.",
+                "Open app settings",
+                { openAppSettings(context) },
+                secondaryLabel = "Back",
+                onSecondary = vm::reset,
+            )
+        }
         UiState.ScreenLockRequired -> ErrorScreen(
             "SET A SCREEN LOCK",
             "Set a screen lock to use Imzo. The device key is protected by it.",

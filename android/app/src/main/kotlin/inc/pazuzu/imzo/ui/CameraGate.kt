@@ -2,6 +2,7 @@ package inc.pazuzu.imzo.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -28,6 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+
+/** The system settings page of this app (permissions, storage and "Clear data"). */
+internal fun openAppSettings(context: Context) {
+    context.startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+}
 
 /** Shows `whenGranted` once the camera permission is held; otherwise the request / open-settings prompt. */
 @Composable
@@ -66,11 +75,7 @@ fun CameraGate(onBack: () -> Unit, whenGranted: @Composable () -> Unit) {
         ) {
             Text("Camera permission is needed to scan QR codes. Nothing is recorded or sent.")
             if (permanentlyDenied) {
-                Button(onClick = {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-                    )
-                }) { Text("Open app settings") }
+                Button(onClick = { openAppSettings(context) }) { Text("Open app settings") }
             } else {
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("Grant camera permission") }
             }

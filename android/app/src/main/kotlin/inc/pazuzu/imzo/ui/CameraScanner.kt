@@ -161,6 +161,8 @@ fun CameraScanner(modifier: Modifier = Modifier, onText: (String) -> Unit) {
                 p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             } catch (_: IllegalArgumentException) { // no back camera
                 noCamera = true
+            } catch (_: IllegalStateException) { // camera in use elsewhere, or use cases cannot be combined here
+                noCamera = true
             } catch (_: ExecutionException) { // camera provider failed to initialise
                 noCamera = true
             }

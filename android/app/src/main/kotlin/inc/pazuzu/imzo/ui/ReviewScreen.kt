@@ -77,7 +77,11 @@ private fun Header(d: ReviewDisplay, modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("TOTAL (recomputed on this device)", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary, softWrap = true)
         Text(d.total, fontSize = 32.sp, fontWeight = FontWeight.Black, lineHeight = 36.sp, softWrap = true)
-        Text("Compare with the laptop", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            "Check every name and account against your own list",
+            fontSize = 16.sp, fontWeight = FontWeight.SemiBold, softWrap = true, modifier = Modifier.padding(top = 4.dp),
+        )
+        Text("Order fingerprint", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 4.dp))
         for (line in d.fingerprint) {
             Text(line, fontFamily = FontFamily.Monospace, fontSize = 22.sp, fontWeight = FontWeight.Bold, softWrap = true)
         }
