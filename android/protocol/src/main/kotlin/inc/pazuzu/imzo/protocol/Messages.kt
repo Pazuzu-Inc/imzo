@@ -58,8 +58,10 @@ private fun isDigits(s: String) = s.isNotEmpty() && s.all { it in '0'..'9' }
 
 /**
  * Same checks, same order as `_check_text` in the reference. The Python "C*" categories are
- * Cc, Cf, Cs, Co, Cn; unassigned (Cn) is rejected on purpose so a difference between the JVM's and
- * Python's Unicode tables can only make this stricter, never looser.
+ * Cc, Cf, Cs, Co, Cn; unassigned (Cn) is rejected on purpose. The two sides use different Unicode
+ * tables (Android 14+ ICU is newer than Python 3.11's), so a character assigned in one table and not
+ * in the other can make either side stricter or looser than the other: the tables are not claimed
+ * to agree.
  */
 private fun checkText(value: Any?, maxBytes: Int, what: String) {
     if (value !is String || value.isEmpty()) throw ProtocolError(BAD, "$what must be non-empty text")
@@ -91,9 +93,9 @@ private fun validateRequest(obj: Any?): Request {
     if (rawItems !is List<*> || rawItems.size !in 1..MAX_ITEMS) throw ProtocolError(BAD, "item count out of range")
     var total = 0L
     val items = ArrayList<Item>(rawItems.size)
-    for (it in rawItems) {
-        if (it !is List<*> || it.size != 3) throw ProtocolError(BAD, "item must be [name, account, amount]")
-        val (name, account, amt) = it
+    for (entry in rawItems) {
+        if (entry !is List<*> || entry.size != 3) throw ProtocolError(BAD, "item must be [name, account, amount]")
+        val (name, account, amt) = entry
         checkText(name, MAX_NAME_BYTES, "name")
         if (account !is String || !isDigits(account) || account.length !in listOf(16, 20)) {
             throw ProtocolError(BAD, "account must be 16 or 20 digits")

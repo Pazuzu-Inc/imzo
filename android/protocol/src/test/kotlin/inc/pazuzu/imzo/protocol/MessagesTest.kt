@@ -167,12 +167,12 @@ class MessagesTest {
     fun textRules() {
         assertEquals("OK", code(requestWith()))
         assertEquals("OK", code(requestWith(name = "Дилноза Юсупова")))
-        assertEquals("BAD FORMAT: name has control characters", code(requestWith(name = "Ab͸")))
-        assertEquals("BAD FORMAT: name has control characters", code(requestWith(name = "Ab‮")))
+        assertEquals("BAD FORMAT: name has control characters", code(requestWith(name = "Ab\u0378")))
+        assertEquals("BAD FORMAT: name has control characters", code(requestWith(name = "Ab\u202E")))
         assertEquals("BAD FORMAT: ref has control characters", code(requestWith(ref = "x\u0000")))
-        assertEquals("BAD FORMAT: ref has control characters", code(requestWith(ref = "x"))) // private use
-        assertEquals("BAD FORMAT: ref has control characters", code(requestWith(ref = "x😀󠀁"))) // astral: emoji ok, U+E0001 is Cf
-        assertEquals("BAD FORMAT: name not NFC", code(requestWith(name = "é")))
+        assertEquals("BAD FORMAT: ref has control characters", code(requestWith(ref = "x\uE000"))) // private use
+        assertEquals("BAD FORMAT: ref has control characters", code(requestWith(ref = "x😀\uDB40\uDC01"))) // astral: emoji ok, U+E0001 is Cf
+        assertEquals("BAD FORMAT: name not NFC", code(requestWith(name = "e\u0301")))
         assertEquals("BAD FORMAT: ref must be non-empty text", code(requestWith(ref = "")))
         assertEquals("BAD FORMAT: ref too long", code(requestWith(ref = "a".repeat(65))))
         assertEquals("OK", code(requestWith(ref = "a".repeat(64))))
