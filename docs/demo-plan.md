@@ -8,10 +8,10 @@ The protocol already exists and is tested in `protocol/imzo_ref.py`. The demo is
 
 | # | Piece | What it does | Built with | Status |
 | --- | --- | --- | --- | --- |
-| 1 | **Approver app (Android)** | Scans request QR frames, strict-parses, recomputes totals, shows every beneficiary, signs with a Keystore key after biometric or PIN, plays the answer as QR. Enrols itself (shows its public key as QR). No `INTERNET` permission | Kotlin, Jetpack Compose, CameraX, ZXing core (pure Java, no permissions), Android Keystore P-256, BiometricPrompt | Not started |
-| 2 | **Protocol core in Kotlin** | CBOR strict decoder and encoder, request validation, fingerprint, response signing input, `IMQ1` framing. Must pass `protocol/vectors.json` | Plain Kotlin, no Android dependencies, JVM unit tests | Not started |
-| 3 | **Backend** | Wraps the existing `imzo_ref.Server`: create order, verify answer, single use, maker-checker, hash-chained audit log, mock core banking, device registry | Python, runs on the laptop (FastAPI or stdlib) | Logic exists; HTTP layer to write |
-| 4 | **Initiator page (the "infected laptop")** | Order builder with the payroll, the **tamper switch**, request QR player, webcam scan of the answer QR, audit log view | Static HTML and JS in the browser, a small QR library | Not started |
+| 1 | **Approver app (Android)** | Scans request QR frames, strict-parses, recomputes totals, shows every beneficiary, signs with a Keystore key after biometric or PIN, plays the answer as QR. Enrols itself: scans the server's `en` challenge, shows the 6-digit code and a signed `er` proof-of-possession QR. No `INTERNET` permission | Kotlin, Jetpack Compose, CameraX, ZXing core (pure Java, no permissions), Android Keystore P-256, BiometricPrompt | Built; device checks pending |
+| 2 | **Protocol core in Kotlin** | CBOR strict decoder and encoder, request validation, fingerprint, response signing input, `IMQ1` framing. Must pass `protocol/vectors.json` | Plain Kotlin, no Android dependencies, JVM unit tests | Done, cross-checked against the reference |
+| 3 | **Backend** | Wraps the existing `imzo_ref.Server`: create order, verify answer, single use, maker-checker, hash-chained audit log, mock core banking, device registry | Python, runs on the laptop (stdlib `http.server`) | Done (stdlib http.server) |
+| 4 | **Initiator page (the "infected laptop")** | Order builder with the payroll, the **tamper switch**, request QR player, webcam scan of the answer QR, audit log view | Static HTML and JS in the browser, a small QR library | Done; webcam path untested on demo hardware |
 | 5 | **Demo kit** | Phone stand, laptop, webcam if the laptop camera is awkward, printed payroll list for the judge, spare phone, recorded fallback clip | Physical | To prepare |
 | 6 | **Imzo Device (stretch)** | Same approver on the LilyGO T-Display S3 AMOLED with a camera | ESP32-S3 firmware | After the app works |
 
@@ -21,10 +21,10 @@ Everything runs on one laptop. The phone never touches the network: the only lin
 
 Pieces 2 and 3+4 only depend on the protocol, so they can run in parallel after M0.
 
-- **M0 Toolchain.** Install Android command-line tools or Android Studio, JDK 17, adb; enable USB debugging on your phone; "hello camera" app runs on the phone. Today none of this is installed on the Mac (only Java).
+- **M0 Toolchain.** Install Android command-line tools or Android Studio, JDK 17, adb; enable USB debugging on your phone; "hello camera" app runs on the phone.
 - **M1 Protocol core in Kotlin.** Passes every vector in `vectors.json` and rejects the hostile cases from `test_imzo.py`. Runs on the Mac without a phone.
 - **M2 Backend and initiator page.** Full loop with a Python stand-in for the approver, so the web side is tested before the app exists.
-- **M3 Approver app.** Enrolment, scan, review screen, sign, answer QR. Check with `aapt dump permissions` that only camera is declared.
+- **M3 Approver app.** Enrolment, scan, review screen, sign, answer QR. Check with `aapt dump permissions`: only CAMERA, USE_BIOMETRIC and an app-internal receiver permission, enforced by the checkPermissions task.
 - **M4 End-to-end.** Run 1 and Run 2 on the real phone and the laptop; audit entry visible; rehearse three times; record the fallback clip. This is the demo-ready line.
 - **M5 Device edition (stretch).** See below.
 
@@ -73,4 +73,4 @@ Kotlin and Compose for the app; Python backend on the laptop; static web page fo
 
 ## Tuning (pending device test)
 
-To fill in after the first device run of the Task 8 scan scaffold: chunk size (default 200 bytes, about 290 characters per frame, QR version 13 at ECC M), request player fps, scan time for the 12-person payroll, and what worked on the laptop screen (brightness, distance, ECC level).
+To fill in after the first device run of the Scan order screen: chunk size (default 200 bytes, about 290 characters per frame, QR version 13 at ECC M), request player fps, scan time for the 12-person payroll, and what worked on the laptop screen (brightness, distance, ECC level).

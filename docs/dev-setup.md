@@ -83,6 +83,18 @@ Check the merged APK permissions (INTERNET must never appear). The build already
 aapt2 dump permissions app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Release build for the screenshot check (demo signing)
+
+The release APK is built unsigned (there is deliberately no signing config in Gradle), so it cannot be installed as it is. To check the release-only behaviour (`FLAG_SECURE`: no screenshots, no recents thumbnail) on a phone, sign it with a throwaway demo key:
+
+```bash
+cd android
+./gradlew :app:assembleRelease --offline
+IMZO_KS_PASS='choose-a-demo-password' scripts/sign_release_for_demo.sh     # or run it without the variable to be asked
+```
+
+The script creates `~/dev/imzo-demo.keystore` on first use (outside the repo; password from `IMZO_KS_PASS` or typed without echo, never printed), runs `zipalign` and `apksigner` from the newest build-tools, writes `app/build/outputs/apk/release/app-release-demo.apk` and runs `check_permissions.sh` on it. Install that file with `adb install -r`; if a debug build is on the phone, uninstall it first (different signature), which wipes the app's key and counter. This is a demo key, not a release process.
+
 ## Tests
 
 Two different things are called `protocol`: the **Python reference** in `protocol/` at the repo root, and the **Kotlin Gradle module** `android/protocol`. The Python commands below run from the repo root's `protocol/` folder, the Gradle ones from `android/`.
@@ -133,11 +145,11 @@ adb devices                                   # the device must be listed as "de
 adb shell getprop ro.build.version.release    # Android version, must be 11 or higher
 ```
 
-4. Install and launch:
+4. Install and launch (`installDebug` first runs the permission guard on the APK it installs):
 
 ```bash
 cd android
-./gradlew :app:installDebug
+./gradlew :app:assembleDebug :app:installDebug
 adb shell am start -n inc.pazuzu.imzo/.MainActivity
 ```
 

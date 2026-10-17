@@ -25,7 +25,7 @@
 
 ## Review Focus
 
-1. **Names with code points that Python 3.11 and Android classify differently** (unassigned or newly added characters): both sides must reject as "has control characters"; Kotlin treats unassigned (`Cn`) as control. Pinned in Task 3.
+1. **Names with code points that Python 3.11 and Android classify differently** (unassigned or newly added characters): both sides reject unassigned (`Cn`) as "has control characters", but the two Unicode tables differ (Android 14+ ICU is newer than Python 3.11), so a character can make either side stricter or looser than the other; the shared cases are pinned in Task 3.
 2. **Frames from two different orders alternating on screen** (an old QR still playing, then a new one): the assembler must not mix them; a new session id resets and the screen says so. Pinned in Task 4.
 3. **App killed after signing but before the answer is shown, or the counter store failing**: the counter is persisted before the answer is returned, so a later signature never reuses a counter. Pinned in Task 7.
 4. **Request QR for a different device** (another approver's order): shows WRONG DEVICE and offers no way to sign. Pinned in Task 4 and Task 9.
