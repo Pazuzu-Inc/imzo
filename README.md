@@ -7,7 +7,7 @@ This folder is its own git repository (Pazuzu-Inc/imzo).
 
 Imzo is one protocol with two ways to run the approver, so a client can choose by risk and budget:
 
-- **Imzo Device:** a dedicated, fully offline pocket device with a small screen (shows the order, then the answer QR), a camera and a secure element. No radios. This is the highest-assurance option. It is a target design, not built.
+- **Imzo Device:** a dedicated, fully offline pocket device with a small screen (shows the order, then the answer QR), a camera and a secure element. No radios. This is the highest-assurance option. A first version runs on a LilyGO T-Display S3 AMOLED (key in flash, no secure element); the camera is not attached yet.
 - **Imzo Approver app:** an Android app with no `INTERNET` permission; camera is the only runtime permission (biometric is an install-time permission); key in the Keystore. It is cheap and quick to roll out. The demo and the pilot use this edition.
 
 Both editions talk to the world only through QR frames. Details and limits: [`docs/editions.md`](docs/editions.md).
@@ -27,6 +27,7 @@ Both editions talk to the world only through QR frames. Details and limits: [`do
 | `backend/` | `app.py`: stdlib HTTP service around the reference `Server` (orders, answers, enrolment, audit log); `test_app.py`: its tests |
 | `web/` | The initiator page (the "untrusted laptop"): order builder, tamper switch, QR player, webcam scanner; `web/test/` has its Node tests |
 | `android/` | The Android approver app (`:app`) and its pure-Kotlin protocol port (`:protocol`) |
+| `device/` | The Imzo Device firmware for the LilyGO T-Display S3 AMOLED (ESP32-S3): portable C++ protocol core, host tests, firmware, rehearsal bridge. See `device/README.md` |
 | `docs/dev-setup.md` | Toolchain, build, test and phone setup on the Mac |
 | `docs/demo-runbook.md` | Setup checklist, enrolment script, Run 1 and Run 2, recovery table, checks still pending on a phone |
 | `docs/editions.md` | The two editions (device and app): what "no internet" means, limits, target spec |

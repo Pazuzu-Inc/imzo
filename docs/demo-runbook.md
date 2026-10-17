@@ -85,6 +85,12 @@ Only the first real-phone run has happened (Redmi 9, Android 12: instrumented te
 
 Results to record here once known: scan time 12-person payroll ___ s; 50-item payroll ___ s; chunk size ___ bytes; fps ___; ECC ___; security level: measured on the Redmi 9: TEE (securityLevel 1), not StrongBox.
 
+## Imzo Device (ESP32-S3) edition
+
+Built and flashed on a LilyGO T-Display S3 AMOLED; see `device/README.md`. Tested with `device/tools/bridge.py`, which stands in for the camera over USB serial against the real backend: enrolment (codes match), Run 1 (EXECUTED), Run 2 (REJECTED, chain ok), and the tampered-but-approved case (executes the tampered account, as documented). **Not yet done:** the camera path (scanner module not attached), reading the device's answer QR with the laptop webcam (the display is about 44 x 20 mm, so the webcam must be close), and a person looking at the screen layouts.
+
+Operating the device: the request QR goes to the scanner; A = next page, B = back; on the decision page hold A for approve or B for reject for 1.5 seconds; A dismisses the answer QR. Enrol the same way as the phone, with user `alice` or another name.
+
 ## Recovery
 
 | Symptom | What to do |

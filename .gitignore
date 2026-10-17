@@ -13,3 +13,5 @@ android/.kotlin/
 *.iml
 *.keystore
 *.jks
+device/host/build/
+device/.pio/
