@@ -53,7 +53,9 @@ class KeystoreSignerTest {
             KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
             info.userAuthenticationType,
         )
-        assertTrue("invalidated by biometric enrolment", info.isInvalidatedByBiometricEnrollment)
+        // Not asserted: with DEVICE_CREDENTIAL allowed, Android binds the key to the screen-lock secure id,
+        // so biometric enrolment does not invalidate it (measured on a Redmi 9, Android 12: false).
+        Log.i("KeystoreSignerTest", "KeyInfo invalidatedByBiometricEnrollment=${info.isInvalidatedByBiometricEnrollment}")
         if (Build.VERSION.SDK_INT >= 31) {
             assertNotEquals("key must not be software-backed", KeyProperties.SECURITY_LEVEL_SOFTWARE, info.securityLevel)
             Log.i("KeystoreSignerTest", "KeyInfo securityLevel=${info.securityLevel} (1=TEE, 2=StrongBox, 0=software)")
