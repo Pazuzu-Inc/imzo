@@ -15,22 +15,35 @@ export class FrameScanner {
     this.stream = null;
     this.timer = null;
     this.last = null;
+    this.generation = 0; // bumped by every start() and stop(); a stale start() releases its own stream
     this.canvas = document.createElement("canvas"); // offscreen, never attached
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
   }
 
   async start() {
     if (this.stream) return;
+    const generation = ++this.generation;
     this.last = null;
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-    this.video.srcObject = this.stream;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    if (generation !== this.generation) {
+      // stop() or a newer start() happened while the camera was opening: nobody owns this stream
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this.stream = stream;
+    this.video.srcObject = stream;
     this.video.muted = true;
     this.video.playsInline = true;
     this.timer = setInterval(() => this._scan(), SCAN_INTERVAL_MS); // _scan waits for the first video frame
-    await this.video.play();
+    try {
+      await this.video.play();
+    } catch (err) {
+      if (generation === this.generation) throw err; // an interrupted play() after stop() is not an error
+    }
   }
 
   stop() {
+    this.generation++;
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());

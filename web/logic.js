@@ -20,6 +20,9 @@ export function applyTamper(items) {
   const row = out[TAMPER_ROW];
   if (!row) return out;
   const account = row[1];
+  if (typeof account !== "string" || !/[0-9]$/.test(account)) {
+    throw new Error(`applyTamper: account of row ${TAMPER_ROW + 1} must end in a digit`);
+  }
   const last = (Number(account.at(-1)) + 1) % 10;
   row[1] = account.slice(0, -1) + String(last);
   return out;
@@ -39,7 +42,7 @@ export function formatUzs(tiyin) {
 /** Header fields of an IMQ1 frame, or null. Never looks at the payload: the page does not parse CBOR. */
 export function parseFrame(text) {
   if (typeof text !== "string") return null;
-  const p = text.split(".", 6);
+  const p = text.split("."); // no limit: a frame with extra dots is invalid, as in the Python reference
   if (p.length !== 6 || p[0] !== "IMQ1" || !KINDS.includes(p[1])) return null;
   if (!/^[0-9]+$/.test(p[3]) || !/^[0-9]+$/.test(p[4])) return null;
   const i = Number(p[3]);

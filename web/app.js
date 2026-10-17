@@ -122,7 +122,12 @@ async function finishFrames(frames) {
 
 function showOrderStatus(status) {
   setStatus(status, statusKind(status), status === "PENDING" ? "Waiting for more approvals." : "");
-  if (status !== "PENDING") {
+  if (status === "PENDING") {
+    // the answer is spent: start collecting afresh so the next frame cannot complete and re-send the old one
+    collector.reset();
+    scanner.resetDedupe();
+    setProgress(0, 0);
+  } else {
     stopStage();
     session = null;
   }
@@ -155,14 +160,22 @@ async function beginEnrol() {
 
 async function sendOrder() {
   const tamper = $("tamper").checked;
-  const items = tamper ? applyTamper(payroll) : tamperOff(payroll); // the table always shows `payroll`
+  const sendButton = $("send");
+  sendButton.disabled = true; // no second order while this request is in flight
   try {
-    const { order_id, frames } = await api("/api/orders", {
-      maker: $("maker").value.trim(),
-      approver: $("approver").value.trim(),
-      ref: $("ref").value,
-      items,
-    });
+    const items = tamper ? applyTamper(payroll) : tamperOff(payroll); // the table always shows `payroll`
+    let created;
+    try {
+      created = await api("/api/orders", {
+        maker: $("maker").value.trim(),
+        approver: $("approver").value.trim(),
+        ref: $("ref").value,
+        items,
+      });
+    } finally {
+      sendButton.disabled = false;
+    }
+    const { order_id, frames } = created;
     beginSession({ mode: "order", orderId: order_id }, "rs");
     setStatus("PENDING", "pending", "Phone: scan this QR, check the order, then show the reply to the webcam.");
     startPlaying(frames);

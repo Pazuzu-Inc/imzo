@@ -98,3 +98,21 @@ test("FrameCollector with a single-frame message completes at once", () => {
   const c = new FrameCollector();
   assert.equal(c.add("IMQ1.er.cccc0003.1.1.QQ").complete, true);
 });
+
+test("parseFrame requires exactly six dot-separated pieces (extra dots are invalid)", () => {
+  assert.notEqual(parseFrame("IMQ1.rs.abcd1234.1.2.AAAA"), null);
+  assert.equal(parseFrame("IMQ1.rs.abcd1234.1.2.AAAA.extra"), null);
+  assert.equal(parseFrame("IMQ1.rs.abcd1234.1.2.AAAA."), null);
+  assert.equal(parseFrame("IMQ1.rs.abcd1234.1.2"), null);
+});
+
+test("applyTamper refuses an account whose last character is not a digit", () => {
+  for (const bad of ["8600000000000000000x", "", "8600 000 "]) {
+    const items = PAYROLL.map((r) => [...r]);
+    items[6][1] = bad;
+    assert.throws(() => applyTamper(items), /digit/i, JSON.stringify(bad));
+  }
+  const items = PAYROLL.map((r) => [...r]);
+  items[6][1] = 12345;
+  assert.throws(() => applyTamper(items), /digit/i);
+});
